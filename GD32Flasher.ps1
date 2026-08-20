@@ -387,7 +387,9 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
         }
     }
     $text = $sb.ToString() -replace '>\s*$', ''
-    $lines = @($text -split "`r?`n" | ForEach-Object { $_ -replace '^>\s*', '' } | Where-Object { $_ -ne '' -and $_ -ne $cmd })
+    # Возврат каретки телнет ставит и в середине потока: без его вычистки эхо
+    # команды остаётся в логе строкой вида «> reset halt».
+    $lines = @($text -split "`r?`n" | ForEach-Object { ($_ -replace "`r", '') -replace '^>\s*', '' } | Where-Object { $_ -ne '' -and $_ -ne $cmd })
     foreach ($l in $lines) { Log $l (Line-Color $l); Parse-Target $l }
     return ($lines -join "`n")
 }
@@ -406,9 +408,11 @@ function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300, [string]$
     } finally { Set-Busy $false (T 'stReady') }
     if ($null -eq $out) { return $false }
 
-    # Эту строку OpenOCD печатает как Error, хотя следом идёт обычное побайтовое
-    # сравнение и штатное «verified N bytes» — ошибкой она не является.
-    $noise = 'checksum mismatch - attempting binary compare'
+    # Известный шум, который ошибкой не является:
+    # «checksum mismatch» — следом идёт побайтовое сравнение и штатное «verified»;
+    # «STM32 flash size failed» — норма для GD32, и в ответ telnet она приходит
+    # голой, без префикса Warn, поэтому фильтром по уровню её не отсечь.
+    $noise = 'checksum mismatch - attempting binary compare|STM32 flash size failed'
     $logged = (($script:pumped.ToString() -split "`r?`n") | Where-Object { $_ -notmatch $noise }) -join "`n"
     # Info/Warn ошибками не считаем: «Warn : STM32 flash size failed» — норма для GD32.
     $answer = (($out -split "`r?`n") | Where-Object { $_ -notmatch $noise -and $_ -notmatch '(?i)^\s*(info|warn|debug)\s*:' }) -join "`n"
@@ -436,9 +440,9 @@ function Invoke-OpenOcdOnce([string]$targetCfg, [string[]]$cmds, [int]$waitSec =
         '-f', "interface/$($cmbIface.Text).cfg",
         '-f', "target/$targetCfg.cfg",
         '-c', "`"adapter speed $($cmbSpeed.Text)`"",
-        '-c', '"gdb_port disabled"',
-        '-c', '"tcl_port disabled"',
-        '-c', '"telnet_port disabled"'
+        '-c', '"gdb port disabled"',
+        '-c', '"tcl port disabled"',
+        '-c', '"telnet port disabled"'
     )
     foreach ($c in $cmds) { $argList += @('-c', "`"$c`"") }
 
