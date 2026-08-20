@@ -7,6 +7,15 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
+# Прячем консоль только после успешной загрузки сборок: если что-то упадёт раньше,
+# окно останется на экране вместе с текстом ошибки.
+Add-Type -Name Win -Namespace Native -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+'@
+$hWnd = [Native.Win]::GetConsoleWindow()
+if ($hWnd -ne [IntPtr]::Zero) { [void][Native.Win]::ShowWindow($hWnd, 0) }
+
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
