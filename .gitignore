@@ -1,0 +1,5 @@
+# Распакованный OpenOCD и рабочие файлы — в репозитории только архив
+xpack-openocd-*/
+work/
+*.readback.bin
+backup_*.bin
