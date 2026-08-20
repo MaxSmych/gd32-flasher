@@ -226,18 +226,25 @@ $Str = @{
 
 function T([string]$key) { return $Str[$script:Lang][$key] }
 
-# --- палитра в духе Cube ---
-$clrBack   = [System.Drawing.Color]::FromArgb(30, 42, 56)
-$clrPanel  = [System.Drawing.Color]::FromArgb(37, 53, 73)
-$clrHeader = [System.Drawing.Color]::FromArgb(15, 42, 71)
-$clrBtn    = [System.Drawing.Color]::FromArgb(46, 125, 178)
-$clrBtnAlt = [System.Drawing.Color]::FromArgb(70, 90, 110)
-$clrGreen  = [System.Drawing.Color]::FromArgb(96, 160, 60)
-$clrRed    = [System.Drawing.Color]::FromArgb(170, 60, 60)
-$clrText   = [System.Drawing.Color]::White
-$clrDim    = [System.Drawing.Color]::FromArgb(170, 190, 210)
-$clrLogBg  = [System.Drawing.Color]::FromArgb(226, 231, 237)   # приглушённый фон лога
-$clrAccent = [System.Drawing.Color]::FromArgb(120, 190, 240)
+# --- палитра в духе CubeProgrammer ---
+$clrBack   = [System.Drawing.Color]::FromArgb(219, 226, 234)
+$clrPanel  = [System.Drawing.Color]::FromArgb(247, 249, 251)
+$clrHeader = [System.Drawing.Color]::FromArgb(10, 30, 50)
+$clrHeader2= [System.Drawing.Color]::FromArgb(18, 47, 75)
+$clrBtn    = [System.Drawing.Color]::FromArgb(8, 171, 224)
+$clrBtnAlt = [System.Drawing.Color]::FromArgb(94, 109, 122)
+$clrGreen  = [System.Drawing.Color]::FromArgb(49, 179, 122)
+$clrRed    = [System.Drawing.Color]::FromArgb(209, 76, 76)
+$clrText   = [System.Drawing.Color]::FromArgb(20, 30, 38)
+$clrDim    = [System.Drawing.Color]::FromArgb(96, 110, 126)
+$clrLogBg  = [System.Drawing.Color]::FromArgb(247, 249, 250)
+$clrAccent = [System.Drawing.Color]::FromArgb(65, 186, 255)
+$clrSide   = [System.Drawing.Color]::FromArgb(15, 38, 58)
+$clrSide2  = [System.Drawing.Color]::FromArgb(12, 31, 48)
+$clrLine   = [System.Drawing.Color]::FromArgb(63, 107, 150)
+$clrFocus  = [System.Drawing.Color]::FromArgb(137, 207, 242)
+$clrSideText = [System.Drawing.Color]::FromArgb(230, 239, 247)
+$clrSideDim  = [System.Drawing.Color]::FromArgb(157, 183, 205)
 
 function Get-OpenOcd {
     $exe = Get-ChildItem -Path $Base -Filter openocd.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -510,39 +517,43 @@ function Invoke-Backup {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "GD32Flasher $AppVersion"
-$form.Size = New-Object System.Drawing.Size(1180, 780)
-$form.MinimumSize = New-Object System.Drawing.Size(1060, 700)
+$form.Size = New-Object System.Drawing.Size(1200, 780)
+$form.MinimumSize = New-Object System.Drawing.Size(1080, 700)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $clrBack
 $form.ForeColor = $clrText
 $form.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+$form.FormBorderStyle = 'Sizable'
+$form.Padding = New-Object System.Windows.Forms.Padding(0)
 
 function New-Btn($text, $color) {
     $b = New-Object System.Windows.Forms.Button
     $b.Text = $text
     $b.AutoSize = $true
     $b.AutoSizeMode = 'GrowAndShrink'
-    $b.MinimumSize = New-Object System.Drawing.Size(120, 34)
-    $b.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+    $b.MinimumSize = New-Object System.Drawing.Size(120, 32)
+    $b.Padding = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
     $b.Margin = New-Object System.Windows.Forms.Padding(0, 0, 8, 8)
     $b.FlatStyle = 'Flat'
-    $b.FlatAppearance.BorderSize = 0
+    $b.FlatAppearance.BorderSize = 1
+    $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(60, 128, 190)
     $b.BackColor = $color
     $b.ForeColor = [System.Drawing.Color]::White
+    $b.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
     return $b
 }
 function New-Cap($text, $x, $y) {
     $l = New-Object System.Windows.Forms.Label
     $l.Text = $text; $l.AutoSize = $true
     $l.Location = New-Object System.Drawing.Point($x, $y)
-    $l.ForeColor = $clrDim
+     $l.ForeColor = $clrSideDim
     return $l
 }
 function New-Val($text, $x, $y) {
     $l = New-Object System.Windows.Forms.Label
     $l.Text = $text; $l.AutoSize = $true
     $l.Location = New-Object System.Drawing.Point($x, $y)
-    $l.ForeColor = $clrText
+     $l.ForeColor = $clrSideText
     return $l
 }
 function New-Combo($x, $y, $w) {
@@ -555,14 +566,16 @@ function New-Combo($x, $y, $w) {
 
 # шапка
 $header = New-Object System.Windows.Forms.Panel
-$header.Dock = 'Top'; $header.Height = 56; $header.BackColor = $clrHeader
+$header.Dock = 'Top'; $header.Height = 58; $header.BackColor = $clrHeader
+$header.Padding = New-Object System.Windows.Forms.Padding(0)
+$header.BorderStyle = 'FixedSingle'
 $title = New-Object System.Windows.Forms.Label
 $title.Text = "GD32Flasher $AppVersion"
 $title.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 15)
-$title.ForeColor = $clrText; $title.AutoSize = $true
+$title.ForeColor = [System.Drawing.Color]::White; $title.AutoSize = $true
 $title.Location = New-Object System.Drawing.Point(16, 14)
 $subtitle = New-Object System.Windows.Forms.Label
-$subtitle.ForeColor = $clrDim; $subtitle.AutoSize = $true
+$subtitle.ForeColor = [System.Drawing.Color]::FromArgb(160, 182, 200); $subtitle.AutoSize = $true
 $subtitle.Location = New-Object System.Drawing.Point(152, 21)
 
 # правая часть шапки — потоком справа налево, чтобы не считать координаты вручную
@@ -570,9 +583,10 @@ $hdrRight = New-Object System.Windows.Forms.FlowLayoutPanel
 $hdrRight.Dock = 'Right'
 $hdrRight.FlowDirection = 'RightToLeft'
 $hdrRight.WrapContents = $false
-$hdrRight.Width = 420
+$hdrRight.Width = 440
 $hdrRight.Padding = New-Object System.Windows.Forms.Padding(0, 16, 16, 0)
 $hdrRight.BackColor = $clrHeader
+$hdrRight.BorderStyle = 'None'
 
 $lblConn = New-Object System.Windows.Forms.Label
 $lblConn.AutoSize = $true
@@ -597,7 +611,9 @@ $header.Controls.AddRange(@($hdrRight, $title, $subtitle))
 
 # правая панель — подключение и информация о цели
 $side = New-Object System.Windows.Forms.Panel
-$side.Dock = 'Right'; $side.Width = 306; $side.BackColor = $clrPanel
+$side.Dock = 'Right'; $side.Width = 306; $side.BackColor = $clrSide
+$side.BorderStyle = 'FixedSingle'
+$side.Padding = New-Object System.Windows.Forms.Padding(0)
 
 $grpConn = New-Object System.Windows.Forms.Label
 $grpConn.AutoSize = $true
@@ -605,6 +621,12 @@ $grpConn.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 $grpConn.ForeColor = $clrAccent
 $grpConn.Location = New-Object System.Drawing.Point(16, 16)
 $side.Controls.Add($grpConn)
+
+$sideDivider = New-Object System.Windows.Forms.Label
+$sideDivider.Size = New-Object System.Drawing.Size(274, 1)
+$sideDivider.Location = New-Object System.Drawing.Point(16, 42)
+$sideDivider.BackColor = [System.Drawing.Color]::FromArgb(56, 90, 113)
+$side.Controls.Add($sideDivider)
 
 $capIface = New-Cap '' 16 46; $side.Controls.Add($capIface)
 $cmbIface = New-Combo 16 64 274
@@ -660,14 +682,17 @@ $capFlash = New-Cap '' 16 388; $side.Controls.Add($capFlash); $lblFlash = New-Va
 $capVolt  = New-Cap '' 16 414; $side.Controls.Add($capVolt);  $lblVolt  = New-Val '--' 160 414; $side.Controls.Add($lblVolt)
 
 $hint = New-Object System.Windows.Forms.Label
-$hint.ForeColor = $clrDim
+$hint.ForeColor = $clrSideDim
 $hint.Location = New-Object System.Drawing.Point(16, 456)
 $hint.Size = New-Object System.Drawing.Size(274, 130)
 $side.Controls.Add($hint)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
-$main.Dock = 'Fill'; $main.Padding = New-Object System.Windows.Forms.Padding(16, 12, 16, 8)
+$main.Dock = 'Fill'
+$main.Padding = New-Object System.Windows.Forms.Padding(16, 12, 16, 8)
+$main.BackColor = $clrBack
+$main.BorderStyle = 'None'
 
 # Докирование идёт в обратном порядке добавления: добавленный последним получает
 # место первым. Поэтому Fill добавляем раньше всех, а шапку — последней, иначе
@@ -676,15 +701,33 @@ $form.Controls.Add($main)
 $form.Controls.Add($side)
 $form.Controls.Add($header)
 
-$rowFile = New-Object System.Windows.Forms.Panel
-$rowFile.Dock = 'Top'; $rowFile.Height = 34
-$rowFile.Padding = New-Object System.Windows.Forms.Padding(0, 5, 0, 5)
+$rowFile = New-Object System.Windows.Forms.TableLayoutPanel
+$rowFile.Dock = 'Top'
+$rowFile.Height = 50
+$rowFile.AutoSize = $false
+$rowFile.ColumnCount = 3
+$rowFile.RowCount = 1
+$rowFile.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Absolute', 120)))
+$rowFile.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Percent', 100)))
+$rowFile.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle('Absolute', 128)))
+$rowFile.RowStyles.Add((New-Object System.Windows.Forms.RowStyle('Percent', 100)))
+$rowFile.Padding = New-Object System.Windows.Forms.Padding(8, 7, 8, 7)
+$rowFile.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
+$rowFile.BackColor = $clrPanel
+$rowFile.BorderStyle = 'FixedSingle'
+
 $capFile = New-Object System.Windows.Forms.Label
-$capFile.ForeColor = $clrDim; $capFile.AutoSize = $false
-$capFile.Dock = 'Left'; $capFile.Width = 128
+$capFile.ForeColor = $clrDim
+$capFile.AutoSize = $false
+$capFile.Dock = 'Fill'
 $capFile.TextAlign = 'MiddleLeft'
+$capFile.Margin = New-Object System.Windows.Forms.Padding(0, 0, 8, 0)
+
 $txtFile = New-Object System.Windows.Forms.TextBox
 $txtFile.Dock = 'Fill'
+$txtFile.Margin = New-Object System.Windows.Forms.Padding(0, 2, 8, 2)
+$txtFile.BackColor = [System.Drawing.Color]::White
+$txtFile.BorderStyle = 'FixedSingle'
 $txtFile.AllowDrop = $true
 $txtFile.Add_DragEnter({
     if ($_.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
@@ -698,11 +741,11 @@ $txtFile.Add_DragDrop({
         LogInfo ((T 'logSelected') -f $files[0], (Get-Item $files[0]).Length)
     }
 })
+
 $btnBrowse = New-Btn '' $clrBtn
 $btnBrowse.AutoSize = $false
-$btnBrowse.Dock = 'Right'
-$btnBrowse.Width = 110
-$btnBrowse.Margin = New-Object System.Windows.Forms.Padding(8, 0, 0, 0)
+$btnBrowse.Dock = 'Fill'
+$btnBrowse.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 0)
 $btnBrowse.Add_Click({
     $d = New-Object System.Windows.Forms.OpenFileDialog
     $d.Filter = T 'dlgFw'
@@ -711,28 +754,50 @@ $btnBrowse.Add_Click({
         LogInfo ((T 'logSelected') -f $d.FileName, (Get-Item $d.FileName).Length)
     }
 })
-# порядок обратный докированию: Fill добавляем первым, боковые — после
-$rowFile.Controls.AddRange(@($txtFile, $btnBrowse, $capFile))
+$rowFile.Controls.Add($capFile, 0, 0)
+$rowFile.Controls.Add($txtFile, 1, 0)
+$rowFile.Controls.Add($btnBrowse, 2, 0)
 
-$rowAddr = New-Object System.Windows.Forms.Panel
-$rowAddr.Dock = 'Top'; $rowAddr.Height = 38
+$rowAddr = New-Object System.Windows.Forms.FlowLayoutPanel
+$rowAddr.Dock = 'Top'
+$rowAddr.AutoSize = $true
+$rowAddr.AutoSizeMode = 'GrowAndShrink'
+$rowAddr.WrapContents = $false
+$rowAddr.FlowDirection = 'LeftToRight'
+$rowAddr.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 4)
+$rowAddr.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
+
 $capAddr = New-Object System.Windows.Forms.Label
-$capAddr.ForeColor = $clrDim; $capAddr.AutoSize = $true
-$capAddr.Location = New-Object System.Drawing.Point(2, 10)
+$capAddr.ForeColor = $clrDim
+$capAddr.AutoSize = $true
+$capAddr.Width = 80
+$capAddr.Height = 24
+$capAddr.Margin = New-Object System.Windows.Forms.Padding(0, 8, 8, 0)
+$capAddr.TextAlign = 'MiddleLeft'
+
 $txtAddr = New-Object System.Windows.Forms.TextBox
-$txtAddr.Location = New-Object System.Drawing.Point(130, 7)
-$txtAddr.Size = New-Object System.Drawing.Size(110, 24)
+$txtAddr.Width = 120
+$txtAddr.Height = 32
+$txtAddr.Margin = New-Object System.Windows.Forms.Padding(0, 0, 16, 0)
 $txtAddr.Text = '0x08000000'
+
 $capSize = New-Object System.Windows.Forms.Label
-$capSize.ForeColor = $clrDim; $capSize.AutoSize = $true
-$capSize.Location = New-Object System.Drawing.Point(256, 10)
+$capSize.ForeColor = $clrDim
+$capSize.AutoSize = $true
+$capSize.Width = 94
+$capSize.Height = 24
+$capSize.Margin = New-Object System.Windows.Forms.Padding(0, 8, 8, 0)
+$capSize.TextAlign = 'MiddleLeft'
+
 $txtSize = New-Object System.Windows.Forms.TextBox
-$txtSize.Location = New-Object System.Drawing.Point(366, 7)
-$txtSize.Size = New-Object System.Drawing.Size(110, 24)
+$txtSize.Width = 120
+$txtSize.Height = 32
+$txtSize.Margin = New-Object System.Windows.Forms.Padding(0, 0, 16, 0)
 $txtSize.Text = '0x20000'
+
 $chkBackup = New-Object System.Windows.Forms.CheckBox
-$chkBackup.Location = New-Object System.Drawing.Point(496, 8)
 $chkBackup.AutoSize = $true
+$chkBackup.Margin = New-Object System.Windows.Forms.Padding(0, 8, 0, 0)
 $chkBackup.ForeColor = $clrText
 $chkBackup.Checked = $true
 $rowAddr.Controls.AddRange(@($capAddr, $txtAddr, $capSize, $txtSize, $chkBackup))
@@ -743,7 +808,8 @@ $rowBtns.Dock = 'Top'
 $rowBtns.AutoSize = $true
 $rowBtns.AutoSizeMode = 'GrowAndShrink'
 $rowBtns.WrapContents = $true
-$rowBtns.Padding = New-Object System.Windows.Forms.Padding(0, 6, 0, 4)
+$rowBtns.Padding = New-Object System.Windows.Forms.Padding(0, 4, 0, 6)
+$rowBtns.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 10)
 
 $btnProgram = New-Btn '' $clrBtn
 $btnProgram.Add_Click({
@@ -867,10 +933,11 @@ $rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnI
 $log = New-Object System.Windows.Forms.RichTextBox
 $log.Dock = 'Fill'
 $log.Font = New-Object System.Drawing.Font('Consolas', 9)
-$log.BackColor = $clrLogBg
+$log.BackColor = [System.Drawing.Color]::FromArgb(240, 244, 248)
 $log.ForeColor = [System.Drawing.Color]::FromArgb(25, 30, 38)
 $log.ReadOnly = $true
-$log.BorderStyle = 'None'
+$log.BorderStyle = 'FixedSingle'
+$log.Margin = New-Object System.Windows.Forms.Padding(0)
 
 $statusBar = New-Object System.Windows.Forms.Panel
 $statusBar.Dock = 'Bottom'; $statusBar.Height = 48; $statusBar.BackColor = $clrBack
@@ -878,6 +945,8 @@ $progress = New-Object System.Windows.Forms.ProgressBar
 $progress.Location = New-Object System.Drawing.Point(2, 10)
 $progress.Size = New-Object System.Drawing.Size(500, 14)
 $progress.Anchor = 'Top,Left,Right'
+$progress.Style = 'Blocks'
+$progress.ForeColor = $clrBtn
 $lblStatus = New-Object System.Windows.Forms.Label
 $lblStatus.ForeColor = $clrDim; $lblStatus.AutoSize = $true
 $lblStatus.Location = New-Object System.Drawing.Point(2, 30)
