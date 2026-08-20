@@ -804,12 +804,14 @@ $rowAddr.Controls.AddRange(@($capAddr, $txtAddr, $capSize, $txtSize, $chkBackup)
 
 # кнопки: автоподбор высоты, иначе при переносе на второй ряд часть уезжает за край
 $rowBtns = New-Object System.Windows.Forms.FlowLayoutPanel
-$rowBtns.Dock = 'Top'
-$rowBtns.AutoSize = $true
-$rowBtns.AutoSizeMode = 'GrowAndShrink'
-$rowBtns.WrapContents = $true
-$rowBtns.Padding = New-Object System.Windows.Forms.Padding(0, 4, 0, 6)
-$rowBtns.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 10)
+$rowBtns.Dock = 'Left'
+$rowBtns.Width = 54
+$rowBtns.FlowDirection = 'TopDown'
+$rowBtns.WrapContents = $false
+$rowBtns.Padding = New-Object System.Windows.Forms.Padding(5, 8, 5, 8)
+$rowBtns.Margin = New-Object System.Windows.Forms.Padding(0)
+$rowBtns.BackColor = $clrHeader2
+$rowBtns.BorderStyle = 'FixedSingle'
 
 $btnProgram = New-Btn '' $clrBtn
 $btnProgram.Add_Click({
@@ -928,6 +930,30 @@ $tip.AutoPopDelay = 15000
 $tip.InitialDelay = 400
 
 $opButtons = @($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset)
+function Set-ToolButton($button, [string]$glyph, [string]$caption, [System.Drawing.Color]$color) {
+    $button.AutoSize = $false
+    $button.Size = New-Object System.Drawing.Size(42, 42)
+    $button.MinimumSize = New-Object System.Drawing.Size(42, 42)
+    $button.Padding = New-Object System.Windows.Forms.Padding(0)
+    $button.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
+    $button.Text = $glyph
+    $button.Font = New-Object System.Drawing.Font('Segoe UI Symbol', 18)
+    $button.BackColor = $color
+    $button.FlatAppearance.BorderSize = 1
+    $button.FlatAppearance.BorderColor = $clrLine
+    $button.AccessibleName = $caption
+    $tip.SetToolTip($button, $caption)
+}
+
+Set-ToolButton $btnProgram  '↓' (T 'btnProgram') $clrBtn
+Set-ToolButton $btnVerify   '✓' (T 'btnVerify') $clrBtn
+Set-ToolButton $btnRead     '⇩' (T 'btnRead') $clrBtn
+Set-ToolButton $btnErase    '×' (T 'btnErase') $clrRed
+Set-ToolButton $btnInfo     'i' (T 'btnInfo') $clrBtnAlt
+Set-ToolButton $btnFlashSz  '#' (T 'btnFlashSz') $clrBtnAlt
+Set-ToolButton $btnUnlock   '⌑' (T 'btnUnlock') $clrBtnAlt
+Set-ToolButton $btnReset    '↻' (T 'btnReset') $clrBtnAlt
+Set-ToolButton $btnClear    '⌫' (T 'btnClear') $clrBtnAlt
 $rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset, $btnClear))
 
 $log = New-Object System.Windows.Forms.RichTextBox
@@ -954,17 +980,14 @@ $statusBar.Controls.AddRange(@($progress, $lblStatus))
 
 # порядок важен: докированные сверху панели ложатся в обратном порядке добавления
 $main.Controls.Add($log)
-$main.Controls.Add($rowBtns)
 $main.Controls.Add($rowAddr)
 $main.Controls.Add($rowFile)
 $main.Controls.Add($statusBar)
+$main.Controls.Add($rowBtns)
 
-# Ширина окна под один ряд кнопок: подписи меняются вместе с языком, поэтому
-# считаем по фактической ширине кнопок, а не по угаданной константе.
+# Минимальная ширина нужна только для полей формы: команды живут в фиксированной панели слева.
 function Fit-Window {
-    $need = 0
-    foreach ($b in $rowBtns.Controls) { $need += $b.Width + $b.Margin.Left + $b.Margin.Right }
-    $need += $main.Padding.Left + $main.Padding.Right + $side.Width + 26
+    $need = 900 + $main.Padding.Left + $main.Padding.Right + $side.Width + $rowBtns.Width + 26
     $area = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
     $w = [Math]::Min($need, $area.Width - 40)
     if ($w -gt $form.Width) {
@@ -993,15 +1016,6 @@ function Apply-Language {
     $capAddr.Text   = T 'capAddr'
     $capSize.Text   = T 'capSize'
     $chkBackup.Text = T 'chkBackup'
-    $btnProgram.Text= T 'btnProgram'
-    $btnVerify.Text = T 'btnVerify'
-    $btnRead.Text   = T 'btnRead'
-    $btnErase.Text  = T 'btnErase'
-    $btnInfo.Text   = T 'btnInfo'
-    $btnUnlock.Text = T 'btnUnlock'
-    $btnReset.Text  = T 'btnReset'
-    $btnFlashSz.Text= T 'btnFlashSz'
-    $btnClear.Text  = T 'btnClear'
     $btnDetect.Text = T 'btnDetect'
 
     $idx = if ($cmbReset.SelectedIndex -ge 0) { $cmbReset.SelectedIndex } else { 0 }
@@ -1015,6 +1029,15 @@ function Apply-Language {
 
     $tip.SetToolTip($txtFile, (T 'tipFile'))
     $tip.SetToolTip($btnBrowse, (T 'tipFile'))
+        Set-ToolButton $btnProgram  '↓' (T 'btnProgram') $clrBtn
+        Set-ToolButton $btnVerify   '✓' (T 'btnVerify') $clrBtn
+        Set-ToolButton $btnRead     '⇩' (T 'btnRead') $clrBtn
+        Set-ToolButton $btnErase    '×' (T 'btnErase') $clrRed
+        Set-ToolButton $btnInfo     'i' (T 'btnInfo') $clrBtnAlt
+        Set-ToolButton $btnFlashSz  '#' (T 'btnFlashSz') $clrBtnAlt
+        Set-ToolButton $btnUnlock   '⌑' (T 'btnUnlock') $clrBtnAlt
+        Set-ToolButton $btnReset    '↻' (T 'btnReset') $clrBtnAlt
+        Set-ToolButton $btnClear    '⌫' (T 'btnClear') $clrBtnAlt
     if ($form.Visible) { Fit-Window }
 }
 
