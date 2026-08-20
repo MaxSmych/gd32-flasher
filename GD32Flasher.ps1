@@ -625,77 +625,130 @@ $side.Dock = 'Right'; $side.Width = 306; $side.BackColor = $clrSide
 $side.BorderStyle = 'FixedSingle'
 $side.Padding = New-Object System.Windows.Forms.Padding(0)
 
-$grpConn = New-Object System.Windows.Forms.Label
-$grpConn.AutoSize = $true
-$grpConn.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-$grpConn.ForeColor = $clrAccent
-$grpConn.Location = New-Object System.Drawing.Point(16, 16)
-$side.Controls.Add($grpConn)
+$sideFlow = New-Object System.Windows.Forms.FlowLayoutPanel
+$sideFlow.Dock = 'Fill'
+$sideFlow.FlowDirection = 'TopDown'
+$sideFlow.WrapContents = $false
+$sideFlow.AutoScroll = $true
+$sideFlow.Padding = New-Object System.Windows.Forms.Padding(16, 14, 16, 14)
+$sideFlow.BackColor = $clrSide
+$side.Controls.Add($sideFlow)
 
-$sideDivider = New-Object System.Windows.Forms.Label
-$sideDivider.Size = New-Object System.Drawing.Size(274, 1)
-$sideDivider.Location = New-Object System.Drawing.Point(16, 42)
-$sideDivider.BackColor = [System.Drawing.Color]::FromArgb(56, 90, 113)
-$side.Controls.Add($sideDivider)
+function New-SideHeading {
+    $label = New-Object System.Windows.Forms.Label
+    $label.AutoSize = $false
+    $label.Width = 270
+    $label.Height = 24
+    $label.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+    $label.ForeColor = $clrAccent
+    $label.TextAlign = 'MiddleLeft'
+    $label.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 4)
+    return $label
+}
 
-$capIface = New-Cap '' 16 46; $side.Controls.Add($capIface)
-$cmbIface = New-Combo 16 64 274
+function New-SideCaption {
+    $label = New-Object System.Windows.Forms.Label
+    $label.AutoSize = $false
+    $label.Width = 270
+    $label.Height = 18
+    $label.ForeColor = $clrSideDim
+    $label.TextAlign = 'BottomLeft'
+    $label.Margin = New-Object System.Windows.Forms.Padding(0, 3, 0, 1)
+    return $label
+}
+
+function New-SideCombo {
+    $combo = New-Object System.Windows.Forms.ComboBox
+    $combo.Width = 270
+    $combo.Height = 26
+    $combo.FlatStyle = 'Flat'
+    $combo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 4)
+    return $combo
+}
+
+function New-SideInfoRow($caption, $value) {
+    $row = New-Object System.Windows.Forms.FlowLayoutPanel
+    $row.Width = 270
+    $row.Height = 24
+    $row.WrapContents = $false
+    $row.Margin = New-Object System.Windows.Forms.Padding(0)
+    $row.BackColor = $clrSide
+    $caption.AutoSize = $false; $caption.Width = 110; $caption.Height = 24
+    $caption.ForeColor = $clrSideDim; $caption.TextAlign = 'MiddleLeft'
+    $caption.Margin = New-Object System.Windows.Forms.Padding(0)
+    $value.AutoSize = $false; $value.Width = 160; $value.Height = 24
+    $value.ForeColor = $clrSideText; $value.TextAlign = 'MiddleRight'
+    $value.Margin = New-Object System.Windows.Forms.Padding(0)
+    $row.Controls.AddRange(@($caption, $value))
+    return $row
+}
+
+$grpConn = New-SideHeading
+$sideFlow.Controls.Add($grpConn)
+
+$capIface = New-SideCaption
+$cmbIface = New-SideCombo
 $cmbIface.DropDownStyle = 'DropDown'
 $cmbIface.AutoCompleteMode = 'SuggestAppend'
 $cmbIface.AutoCompleteSource = 'ListItems'
-$side.Controls.Add($cmbIface)
+$sideFlow.Controls.AddRange(@($capIface, $cmbIface))
 
-$capTarget = New-Cap '' 16 96; $side.Controls.Add($capTarget)
-$cmbTarget = New-Combo 16 114 274
+$capTarget = New-SideCaption
+$cmbTarget = New-SideCombo
 $cmbTarget.DropDownStyle = 'DropDown'
 $cmbTarget.AutoCompleteMode = 'SuggestAppend'
 $cmbTarget.AutoCompleteSource = 'ListItems'
-$side.Controls.Add($cmbTarget)
+$sideFlow.Controls.AddRange(@($capTarget, $cmbTarget))
 
-$capSpeed = New-Cap '' 16 146; $side.Controls.Add($capSpeed)
-$cmbSpeed = New-Combo 16 164 120
+$capSpeed = New-SideCaption
+$cmbSpeed = New-SideCombo
 $cmbSpeed.DropDownStyle = 'DropDownList'
 @('100', '480', '950', '1800', '4000') | ForEach-Object { [void]$cmbSpeed.Items.Add($_) }
 $cmbSpeed.SelectedItem = '950'
-$side.Controls.Add($cmbSpeed)
+$sideFlow.Controls.AddRange(@($capSpeed, $cmbSpeed))
 
-$capReset = New-Cap '' 152 146; $side.Controls.Add($capReset)
-$cmbReset = New-Combo 152 164 138
+$capReset = New-SideCaption
+$cmbReset = New-SideCombo
 $cmbReset.DropDownStyle = 'DropDownList'
-$side.Controls.Add($cmbReset)
+$sideFlow.Controls.AddRange(@($capReset, $cmbReset))
 
 $btnDetect = New-Btn '' $clrBtnAlt
 $btnDetect.AutoSize = $false
-$btnDetect.Size = New-Object System.Drawing.Size(274, 34)
-$btnDetect.Location = New-Object System.Drawing.Point(16, 202)
+$btnDetect.Size = New-Object System.Drawing.Size(270, 34)
+$btnDetect.Margin = New-Object System.Windows.Forms.Padding(0, 6, 0, 6)
 $btnDetect.Add_Click({ Find-Target })
-$side.Controls.Add($btnDetect)
+$sideFlow.Controls.Add($btnDetect)
 
 $btnConnect = New-Btn '' $clrGreen
 $btnConnect.AutoSize = $false
-$btnConnect.Size = New-Object System.Drawing.Size(274, 38)
+$btnConnect.Size = New-Object System.Drawing.Size(270, 38)
 $btnConnect.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 10)
-$btnConnect.Location = New-Object System.Drawing.Point(16, 244)
+$btnConnect.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 14)
 $btnConnect.Add_Click({ if (Ocd-Connected) { Ocd-Disconnect } else { Ocd-Connect | Out-Null } })
-$side.Controls.Add($btnConnect)
+$sideFlow.Controls.Add($btnConnect)
 
-$grpInfo = New-Object System.Windows.Forms.Label
-$grpInfo.AutoSize = $true
-$grpInfo.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-$grpInfo.ForeColor = $clrAccent
-$grpInfo.Location = New-Object System.Drawing.Point(16, 306)
-$side.Controls.Add($grpInfo)
+$grpInfo = New-SideHeading
+$grpInfo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 3)
+$sideFlow.Controls.Add($grpInfo)
 
-$capCore  = New-Cap '' 16 336; $side.Controls.Add($capCore);  $lblCpu   = New-Val '--' 160 336; $side.Controls.Add($lblCpu)
-$capId    = New-Cap '' 16 362; $side.Controls.Add($capId);    $lblId    = New-Val '--' 160 362; $side.Controls.Add($lblId)
-$capFlash = New-Cap '' 16 388; $side.Controls.Add($capFlash); $lblFlash = New-Val '--' 160 388; $side.Controls.Add($lblFlash)
-$capVolt  = New-Cap '' 16 414; $side.Controls.Add($capVolt);  $lblVolt  = New-Val '--' 160 414; $side.Controls.Add($lblVolt)
+$capCore = New-Object System.Windows.Forms.Label; $lblCpu = New-Object System.Windows.Forms.Label
+$capId = New-Object System.Windows.Forms.Label; $lblId = New-Object System.Windows.Forms.Label
+$capFlash = New-Object System.Windows.Forms.Label; $lblFlash = New-Object System.Windows.Forms.Label
+$capVolt = New-Object System.Windows.Forms.Label; $lblVolt = New-Object System.Windows.Forms.Label
+$sideFlow.Controls.AddRange(@(
+    (New-SideInfoRow $capCore $lblCpu),
+    (New-SideInfoRow $capId $lblId),
+    (New-SideInfoRow $capFlash $lblFlash),
+    (New-SideInfoRow $capVolt $lblVolt)
+))
 
 $hint = New-Object System.Windows.Forms.Label
 $hint.ForeColor = $clrSideDim
-$hint.Location = New-Object System.Drawing.Point(16, 456)
-$hint.Size = New-Object System.Drawing.Size(274, 130)
-$side.Controls.Add($hint)
+$hint.AutoSize = $false
+$hint.Width = 270
+$hint.Height = 112
+$hint.Margin = New-Object System.Windows.Forms.Padding(0, 12, 0, 0)
+$sideFlow.Controls.Add($hint)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
@@ -815,12 +868,12 @@ $rowAddr.Controls.AddRange(@($capAddr, $txtAddr, $capSize, $txtSize, $chkBackup)
 # кнопки: автоподбор высоты, иначе при переносе на второй ряд часть уезжает за край
 $rowBtns = New-Object System.Windows.Forms.FlowLayoutPanel
 $rowBtns.Dock = 'Left'
-$rowBtns.Width = 54
+$rowBtns.Width = 166
 $rowBtns.FlowDirection = 'TopDown'
 $rowBtns.WrapContents = $false
-$rowBtns.Padding = New-Object System.Windows.Forms.Padding(5, 8, 5, 8)
+$rowBtns.Padding = New-Object System.Windows.Forms.Padding(8, 10, 8, 8)
 $rowBtns.Margin = New-Object System.Windows.Forms.Padding(0)
-$rowBtns.BackColor = $clrHeader2
+$rowBtns.BackColor = $clrPanel
 $rowBtns.BorderStyle = 'FixedSingle'
 
 $btnProgram = New-Btn '' $clrBtn
@@ -947,90 +1000,28 @@ $tip.AutoPopDelay = 15000
 $tip.InitialDelay = 400
 
 $opButtons = @($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset)
-function Draw-ToolIcon([System.Drawing.Graphics]$g, [string]$kind, [System.Drawing.Rectangle]$box, [System.Drawing.Color]$color) {
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $pen = New-Object System.Drawing.Pen($color, 2)
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $x = $box.X + 10; $y = $box.Y + 10; $w = 22; $h = 22
-    switch ($kind) {
-        'program' { $g.DrawRectangle($pen, $x + 4, $y + 9, 14, 10); $g.DrawLine($pen, $x + 11, $y, $x + 11, $y + 13); $g.DrawLine($pen, $x + 7, $y + 9, $x + 11, $y + 13); $g.DrawLine($pen, $x + 15, $y + 9, $x + 11, $y + 13) }
-        'verify'  { $g.DrawRectangle($pen, $x + 3, $y + 2, 14, 18); $g.DrawLine($pen, $x + 6, $y + 11, $x + 9, $y + 14); $g.DrawLine($pen, $x + 9, $y + 14, $x + 15, $y + 7) }
-        'read'    { $g.DrawRectangle($pen, $x + 4, $y + 3, 14, 12); $g.DrawLine($pen, $x + 11, $y + 21, $x + 11, $y + 10); $g.DrawLine($pen, $x + 7, $y + 17, $x + 11, $y + 21); $g.DrawLine($pen, $x + 15, $y + 17, $x + 11, $y + 21) }
-        'erase'   { $g.DrawLine($pen, $x + 5, $y + 16, $x + 13, $y + 8); $g.DrawLine($pen, $x + 13, $y + 8, $x + 19, $y + 14); $g.DrawLine($pen, $x + 19, $y + 14, $x + 14, $y + 19); $g.DrawLine($pen, $x + 14, $y + 19, $x + 5, $y + 16); $g.DrawLine($pen, $x + 4, $y + 21, $x + 19, $y + 21) }
-        'info'    { $g.DrawEllipse($pen, $x + 3, $y + 2, 16, 18); $g.DrawLine($pen, $x + 11, $y + 10, $x + 11, $y + 16); $g.DrawEllipse($pen, $x + 10, $y + 6, 2, 2) }
-        'flash'   { $g.DrawRectangle($pen, $x + 4, $y + 4, 14, 14); foreach ($dx in @(1, 21)) { $g.DrawLine($pen, $x + $dx, $y + 7, $x + $dx + 3, $y + 7); $g.DrawLine($pen, $x + $dx, $y + 11, $x + $dx + 3, $y + 11); $g.DrawLine($pen, $x + $dx, $y + 15, $x + $dx + 3, $y + 15) }; $g.DrawLine($pen, $x + 8, $y + 11, $x + 14, $y + 11) }
-        'unlock'  { $g.DrawRectangle($pen, $x + 5, $y + 11, 14, 10); $g.DrawArc($pen, $x + 6, $y + 3, 12, 13, 205, 205); $g.DrawLine($pen, $x + 12, $y + 15, $x + 12, $y + 18) }
-        'reset'   { $g.DrawArc($pen, $x + 4, $y + 4, 16, 16, 45, 275); $g.DrawLine($pen, $x + 18, $y + 5, $x + 21, $y + 5); $g.DrawLine($pen, $x + 21, $y + 5, $x + 21, $y + 9) }
-        'clear'   { $g.DrawLine($pen, $x + 5, $y + 18, $x + 18, $y + 5); $g.DrawLine($pen, $x + 8, $y + 21, $x + 21, $y + 8); $g.DrawLine($pen, $x + 4, $y + 22, $x + 12, $y + 22); $g.DrawLine($pen, $x + 16, $y + 4, $x + 22, $y + 10) }
-    }
-    $pen.Dispose()
+function Set-ActionButton($button, [System.Drawing.Color]$color) {
+    $button.AutoSize = $false
+    $button.Size = New-Object System.Drawing.Size(148, 34)
+    $button.MinimumSize = New-Object System.Drawing.Size(148, 34)
+    $button.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
+    $button.Padding = New-Object System.Windows.Forms.Padding(8, 0, 8, 0)
+    $button.TextAlign = 'MiddleLeft'
+    $button.BackColor = $color
+    $button.FlatAppearance.BorderSize = 0
+    $button.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 }
 
-function Set-ToolButton($button, [string]$kind, [string]$caption, [System.Drawing.Color]$iconColor) {
-    $newButton = $null -eq $button.Tag
-    if ($newButton) {
-        $button.AutoSize = $false
-        $button.Size = New-Object System.Drawing.Size(42, 42)
-        $button.MinimumSize = New-Object System.Drawing.Size(42, 42)
-        $button.Padding = New-Object System.Windows.Forms.Padding(0)
-        $button.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
-        $button.FlatStyle = 'Flat'
-        $button.BackColor = $clrTool
-        $button.FlatAppearance.BorderSize = 0
-            $bitmap = New-Object System.Drawing.Bitmap(42, 42)
-            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-            $iconBounds = New-Object System.Drawing.Rectangle(0, 0, 42, 42)
-            Draw-ToolIcon $graphics $kind $iconBounds $iconColor
-            $graphics.Dispose()
-                $button.BackgroundImage = $bitmap
-                $button.BackgroundImageLayout = 'Center'
-            $button.Tag = $true
-            $button.Add_MouseEnter({ $_.Sender.BackColor = $clrToolHot })
-            $button.Add_MouseLeave({ $_.Sender.BackColor = $clrTool })
-    }
-    $button.Text = ''
-    $button.AccessibleName = $caption
-    $tip.SetToolTip($button, $caption)
-}
-
-Set-ToolButton $btnProgram  'program' (T 'btnProgram') $clrIcon
-Set-ToolButton $btnVerify   'verify' (T 'btnVerify') $clrIcon
-Set-ToolButton $btnRead     'read' (T 'btnRead') $clrIcon
-Set-ToolButton $btnErase    'erase' (T 'btnErase') $clrDangerIcon
-Set-ToolButton $btnInfo     'info' (T 'btnInfo') $clrIcon
-Set-ToolButton $btnFlashSz  'flash' (T 'btnFlashSz') $clrIcon
-Set-ToolButton $btnUnlock   'unlock' (T 'btnUnlock') $clrIcon
-Set-ToolButton $btnReset    'reset' (T 'btnReset') $clrIcon
-Set-ToolButton $btnClear    'clear' (T 'btnClear') $clrIcon
-
-function New-ToolItem($button) {
-    $item = New-Object System.Windows.Forms.PictureBox
-    $item.Size = New-Object System.Drawing.Size(42, 42)
-    $item.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
-    $item.BackColor = $clrTool
-    $item.Image = $button.BackgroundImage
-    $item.SizeMode = 'CenterImage'
-    $item.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $item.Tag = $button
-    $item.AccessibleName = $button.AccessibleName
-    $tip.SetToolTip($item, $button.AccessibleName)
-    $item.Add_Click({ $_.Sender.Tag.PerformClick() })
-    $item.Add_MouseEnter({ $_.Sender.BackColor = $clrToolHot })
-    $item.Add_MouseLeave({ $_.Sender.BackColor = $clrTool })
-    return $item
-}
-
-$icoProgram = New-ToolItem $btnProgram
-$icoVerify = New-ToolItem $btnVerify
-$icoRead = New-ToolItem $btnRead
-$icoErase = New-ToolItem $btnErase
-$icoInfo = New-ToolItem $btnInfo
-$icoFlashSz = New-ToolItem $btnFlashSz
-$icoUnlock = New-ToolItem $btnUnlock
-$icoReset = New-ToolItem $btnReset
-$icoClear = New-ToolItem $btnClear
-$rowBtns.Controls.AddRange(@($icoProgram, $icoVerify, $icoRead, $icoErase, $icoInfo, $icoFlashSz, $icoUnlock, $icoReset, $icoClear))
+Set-ActionButton $btnProgram $clrBtn
+Set-ActionButton $btnVerify $clrBtn
+Set-ActionButton $btnRead $clrBtn
+Set-ActionButton $btnErase $clrRed
+Set-ActionButton $btnInfo $clrBtnAlt
+Set-ActionButton $btnFlashSz $clrBtnAlt
+Set-ActionButton $btnUnlock $clrBtnAlt
+Set-ActionButton $btnReset $clrBtnAlt
+Set-ActionButton $btnClear $clrBtnAlt
+$rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset, $btnClear))
 
 $log = New-Object System.Windows.Forms.RichTextBox
 $log.Dock = 'Fill'
@@ -1090,6 +1081,15 @@ function Apply-Language {
     $capAddr.Text   = T 'capAddr'
     $capSize.Text   = T 'capSize'
     $chkBackup.Text = T 'chkBackup'
+        $btnProgram.Text = T 'btnProgram'
+        $btnVerify.Text = T 'btnVerify'
+        $btnRead.Text = T 'btnRead'
+        $btnErase.Text = T 'btnErase'
+        $btnInfo.Text = T 'btnInfo'
+        $btnFlashSz.Text = T 'btnFlashSz'
+        $btnUnlock.Text = T 'btnUnlock'
+        $btnReset.Text = T 'btnReset'
+        $btnClear.Text = T 'btnClear'
     $btnDetect.Text = T 'btnDetect'
 
     $idx = if ($cmbReset.SelectedIndex -ge 0) { $cmbReset.SelectedIndex } else { 0 }
@@ -1103,24 +1103,6 @@ function Apply-Language {
 
     $tip.SetToolTip($txtFile, (T 'tipFile'))
     $tip.SetToolTip($btnBrowse, (T 'tipFile'))
-        Set-ToolButton $btnProgram  'program' (T 'btnProgram') $clrIcon
-        Set-ToolButton $btnVerify   'verify' (T 'btnVerify') $clrIcon
-        Set-ToolButton $btnRead     'read' (T 'btnRead') $clrIcon
-        Set-ToolButton $btnErase    'erase' (T 'btnErase') $clrDangerIcon
-        Set-ToolButton $btnInfo     'info' (T 'btnInfo') $clrIcon
-        Set-ToolButton $btnFlashSz  'flash' (T 'btnFlashSz') $clrIcon
-        Set-ToolButton $btnUnlock   'unlock' (T 'btnUnlock') $clrIcon
-        Set-ToolButton $btnReset    'reset' (T 'btnReset') $clrIcon
-        Set-ToolButton $btnClear    'clear' (T 'btnClear') $clrIcon
-            $icoProgram.AccessibleName = T 'btnProgram'; $tip.SetToolTip($icoProgram, $icoProgram.AccessibleName)
-            $icoVerify.AccessibleName = T 'btnVerify'; $tip.SetToolTip($icoVerify, $icoVerify.AccessibleName)
-            $icoRead.AccessibleName = T 'btnRead'; $tip.SetToolTip($icoRead, $icoRead.AccessibleName)
-            $icoErase.AccessibleName = T 'btnErase'; $tip.SetToolTip($icoErase, $icoErase.AccessibleName)
-            $icoInfo.AccessibleName = T 'btnInfo'; $tip.SetToolTip($icoInfo, $icoInfo.AccessibleName)
-            $icoFlashSz.AccessibleName = T 'btnFlashSz'; $tip.SetToolTip($icoFlashSz, $icoFlashSz.AccessibleName)
-            $icoUnlock.AccessibleName = T 'btnUnlock'; $tip.SetToolTip($icoUnlock, $icoUnlock.AccessibleName)
-            $icoReset.AccessibleName = T 'btnReset'; $tip.SetToolTip($icoReset, $icoReset.AccessibleName)
-            $icoClear.AccessibleName = T 'btnClear'; $tip.SetToolTip($icoClear, $icoClear.AccessibleName)
     if ($form.Visible) { Fit-Window }
 }
 
