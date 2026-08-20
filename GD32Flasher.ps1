@@ -662,12 +662,12 @@ function New-SideCombo {
     $combo.Width = 270
     $combo.Height = 28
     $combo.FlatStyle = 'Flat'
-    $combo.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-    $combo.ForeColor = [System.Drawing.Color]::FromArgb(18, 48, 73)
-    $combo.BackColor = [System.Drawing.Color]::FromArgb(234, 244, 250)
+    $combo.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $combo.ForeColor = [System.Drawing.Color]::FromArgb(238, 246, 252)
+    $combo.BackColor = [System.Drawing.Color]::FromArgb(13, 55, 86)
     $combo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 5)
-    $combo.Add_GotFocus({ $_.Sender.BackColor = [System.Drawing.Color]::White })
-    $combo.Add_LostFocus({ $_.Sender.BackColor = [System.Drawing.Color]::FromArgb(234, 244, 250) })
+    $combo.Add_GotFocus({ $_.Sender.BackColor = [System.Drawing.Color]::FromArgb(18, 75, 113) })
+    $combo.Add_LostFocus({ $_.Sender.BackColor = [System.Drawing.Color]::FromArgb(13, 55, 86) })
     return $combo
 }
 
