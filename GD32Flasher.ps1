@@ -227,24 +227,28 @@ $Str = @{
 function T([string]$key) { return $Str[$script:Lang][$key] }
 
 # --- палитра в духе CubeProgrammer ---
-$clrBack   = [System.Drawing.Color]::FromArgb(219, 226, 234)
+$clrBack   = [System.Drawing.Color]::FromArgb(222, 229, 235)
 $clrPanel  = [System.Drawing.Color]::FromArgb(247, 249, 251)
-$clrHeader = [System.Drawing.Color]::FromArgb(10, 30, 50)
-$clrHeader2= [System.Drawing.Color]::FromArgb(18, 47, 75)
-$clrBtn    = [System.Drawing.Color]::FromArgb(8, 171, 224)
-$clrBtnAlt = [System.Drawing.Color]::FromArgb(94, 109, 122)
-$clrGreen  = [System.Drawing.Color]::FromArgb(49, 179, 122)
-$clrRed    = [System.Drawing.Color]::FromArgb(209, 76, 76)
+$clrHeader = [System.Drawing.Color]::FromArgb(0, 39, 73)
+$clrHeader2= [System.Drawing.Color]::FromArgb(0, 52, 94)
+$clrBtn    = [System.Drawing.Color]::FromArgb(31, 165, 207)
+$clrBtnAlt = [System.Drawing.Color]::FromArgb(30, 75, 111)
+$clrGreen  = [System.Drawing.Color]::FromArgb(183, 207, 0)
+$clrRed    = [System.Drawing.Color]::FromArgb(191, 73, 73)
 $clrText   = [System.Drawing.Color]::FromArgb(20, 30, 38)
 $clrDim    = [System.Drawing.Color]::FromArgb(96, 110, 126)
 $clrLogBg  = [System.Drawing.Color]::FromArgb(247, 249, 250)
-$clrAccent = [System.Drawing.Color]::FromArgb(65, 186, 255)
-$clrSide   = [System.Drawing.Color]::FromArgb(15, 38, 58)
-$clrSide2  = [System.Drawing.Color]::FromArgb(12, 31, 48)
-$clrLine   = [System.Drawing.Color]::FromArgb(63, 107, 150)
-$clrFocus  = [System.Drawing.Color]::FromArgb(137, 207, 242)
+$clrAccent = [System.Drawing.Color]::FromArgb(72, 194, 236)
+$clrSide   = [System.Drawing.Color]::FromArgb(0, 43, 78)
+$clrSide2  = [System.Drawing.Color]::FromArgb(0, 34, 63)
+$clrLine   = [System.Drawing.Color]::FromArgb(46, 104, 143)
+$clrFocus  = [System.Drawing.Color]::FromArgb(107, 206, 239)
 $clrSideText = [System.Drawing.Color]::FromArgb(230, 239, 247)
 $clrSideDim  = [System.Drawing.Color]::FromArgb(157, 183, 205)
+$clrTool    = [System.Drawing.Color]::FromArgb(0, 47, 84)
+$clrToolHot = [System.Drawing.Color]::FromArgb(0, 78, 126)
+$clrIcon    = [System.Drawing.Color]::FromArgb(208, 228, 28)
+$clrDangerIcon = [System.Drawing.Color]::FromArgb(255, 179, 103)
 
 function Get-OpenOcd {
     $exe = Get-ChildItem -Path $Base -Filter openocd.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -930,30 +934,65 @@ $tip.AutoPopDelay = 15000
 $tip.InitialDelay = 400
 
 $opButtons = @($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset)
-function Set-ToolButton($button, [string]$glyph, [string]$caption, [System.Drawing.Color]$color) {
-    $button.AutoSize = $false
-    $button.Size = New-Object System.Drawing.Size(42, 42)
-    $button.MinimumSize = New-Object System.Drawing.Size(42, 42)
-    $button.Padding = New-Object System.Windows.Forms.Padding(0)
-    $button.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
-    $button.Text = $glyph
-    $button.Font = New-Object System.Drawing.Font('Segoe UI Symbol', 18)
-    $button.BackColor = $color
-    $button.FlatAppearance.BorderSize = 1
-    $button.FlatAppearance.BorderColor = $clrLine
-    $button.AccessibleName = $caption
-    $tip.SetToolTip($button, $caption)
+function Draw-ToolIcon([System.Drawing.Graphics]$g, [string]$kind, [System.Drawing.Rectangle]$box, [System.Drawing.Color]$color) {
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $pen = New-Object System.Drawing.Pen($color, 2)
+    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $x = $box.X + 10; $y = $box.Y + 10; $w = 22; $h = 22
+    switch ($kind) {
+        'program' { $g.DrawRectangle($pen, $x + 4, $y + 9, 14, 10); $g.DrawLine($pen, $x + 11, $y, $x + 11, $y + 13); $g.DrawLine($pen, $x + 7, $y + 9, $x + 11, $y + 13); $g.DrawLine($pen, $x + 15, $y + 9, $x + 11, $y + 13) }
+        'verify'  { $g.DrawRectangle($pen, $x + 3, $y + 2, 14, 18); $g.DrawLine($pen, $x + 6, $y + 11, $x + 9, $y + 14); $g.DrawLine($pen, $x + 9, $y + 14, $x + 15, $y + 7) }
+        'read'    { $g.DrawRectangle($pen, $x + 4, $y + 3, 14, 12); $g.DrawLine($pen, $x + 11, $y + 21, $x + 11, $y + 10); $g.DrawLine($pen, $x + 7, $y + 17, $x + 11, $y + 21); $g.DrawLine($pen, $x + 15, $y + 17, $x + 11, $y + 21) }
+        'erase'   { $g.DrawLine($pen, $x + 5, $y + 16, $x + 13, $y + 8); $g.DrawLine($pen, $x + 13, $y + 8, $x + 19, $y + 14); $g.DrawLine($pen, $x + 19, $y + 14, $x + 14, $y + 19); $g.DrawLine($pen, $x + 14, $y + 19, $x + 5, $y + 16); $g.DrawLine($pen, $x + 4, $y + 21, $x + 19, $y + 21) }
+        'info'    { $g.DrawEllipse($pen, $x + 3, $y + 2, 16, 18); $g.DrawLine($pen, $x + 11, $y + 10, $x + 11, $y + 16); $g.DrawEllipse($pen, $x + 10, $y + 6, 2, 2) }
+        'flash'   { $g.DrawRectangle($pen, $x + 4, $y + 4, 14, 14); foreach ($dx in @(1, 21)) { $g.DrawLine($pen, $x + $dx, $y + 7, $x + $dx + 3, $y + 7); $g.DrawLine($pen, $x + $dx, $y + 11, $x + $dx + 3, $y + 11); $g.DrawLine($pen, $x + $dx, $y + 15, $x + $dx + 3, $y + 15) }; $g.DrawLine($pen, $x + 8, $y + 11, $x + 14, $y + 11) }
+        'unlock'  { $g.DrawRectangle($pen, $x + 5, $y + 11, 14, 10); $g.DrawArc($pen, $x + 6, $y + 3, 12, 13, 205, 205); $g.DrawLine($pen, $x + 12, $y + 15, $x + 12, $y + 18) }
+        'reset'   { $g.DrawArc($pen, $x + 4, $y + 4, 16, 16, 45, 275); $g.DrawLine($pen, $x + 18, $y + 5, $x + 21, $y + 5); $g.DrawLine($pen, $x + 21, $y + 5, $x + 21, $y + 9) }
+        'clear'   { $g.DrawLine($pen, $x + 5, $y + 18, $x + 18, $y + 5); $g.DrawLine($pen, $x + 8, $y + 21, $x + 21, $y + 8); $g.DrawLine($pen, $x + 4, $y + 22, $x + 12, $y + 22); $g.DrawLine($pen, $x + 16, $y + 4, $x + 22, $y + 10) }
+    }
+    $pen.Dispose()
 }
 
-Set-ToolButton $btnProgram  '↓' (T 'btnProgram') $clrBtn
-Set-ToolButton $btnVerify   '✓' (T 'btnVerify') $clrBtn
-Set-ToolButton $btnRead     '⇩' (T 'btnRead') $clrBtn
-Set-ToolButton $btnErase    '×' (T 'btnErase') $clrRed
-Set-ToolButton $btnInfo     'i' (T 'btnInfo') $clrBtnAlt
-Set-ToolButton $btnFlashSz  '#' (T 'btnFlashSz') $clrBtnAlt
-Set-ToolButton $btnUnlock   '⌑' (T 'btnUnlock') $clrBtnAlt
-Set-ToolButton $btnReset    '↻' (T 'btnReset') $clrBtnAlt
-Set-ToolButton $btnClear    '⌫' (T 'btnClear') $clrBtnAlt
+function Set-ToolButton($button, [string]$kind, [string]$caption, [System.Drawing.Color]$iconColor) {
+    $newButton = $null -eq $button.Tag
+    if ($newButton) {
+        $button.AutoSize = $false
+        $button.Size = New-Object System.Drawing.Size(42, 42)
+        $button.MinimumSize = New-Object System.Drawing.Size(42, 42)
+        $button.Padding = New-Object System.Windows.Forms.Padding(0)
+        $button.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
+        $button.FlatStyle = 'Flat'
+        $button.BackColor = $clrTool
+        $button.FlatAppearance.BorderSize = 0
+    }
+    $button.Text = ''
+    $button.Tag = [pscustomobject]@{ Kind = $kind; IconColor = $iconColor }
+    $button.AccessibleName = $caption
+    $tip.SetToolTip($button, $caption)
+    if ($newButton) {
+        $button.Add_Paint({
+            $data = $_.Sender.Tag
+            $back = if ($_.Sender.Enabled) { $_.Sender.BackColor } else { [System.Drawing.Color]::FromArgb(70, 91, 107) }
+            $_.Graphics.FillRectangle((New-Object System.Drawing.SolidBrush($back)), $_.ClipRectangle)
+            $iconColor = if ($_.Sender.Enabled) { $data.IconColor } else { [System.Drawing.Color]::FromArgb(125, 148, 164) }
+            Draw-ToolIcon $_.Graphics $data.Kind $_.ClipRectangle $iconColor
+        })
+        $button.Add_MouseEnter({ $_.Sender.BackColor = $clrToolHot; $_.Sender.Invalidate() })
+        $button.Add_MouseLeave({ $_.Sender.BackColor = $clrTool; $_.Sender.Invalidate() })
+    }
+    $button.Invalidate()
+}
+
+Set-ToolButton $btnProgram  'program' (T 'btnProgram') $clrIcon
+Set-ToolButton $btnVerify   'verify' (T 'btnVerify') $clrIcon
+Set-ToolButton $btnRead     'read' (T 'btnRead') $clrIcon
+Set-ToolButton $btnErase    'erase' (T 'btnErase') $clrDangerIcon
+Set-ToolButton $btnInfo     'info' (T 'btnInfo') $clrIcon
+Set-ToolButton $btnFlashSz  'flash' (T 'btnFlashSz') $clrIcon
+Set-ToolButton $btnUnlock   'unlock' (T 'btnUnlock') $clrIcon
+Set-ToolButton $btnReset    'reset' (T 'btnReset') $clrIcon
+Set-ToolButton $btnClear    'clear' (T 'btnClear') $clrIcon
 $rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset, $btnClear))
 
 $log = New-Object System.Windows.Forms.RichTextBox
@@ -1029,15 +1068,15 @@ function Apply-Language {
 
     $tip.SetToolTip($txtFile, (T 'tipFile'))
     $tip.SetToolTip($btnBrowse, (T 'tipFile'))
-        Set-ToolButton $btnProgram  '↓' (T 'btnProgram') $clrBtn
-        Set-ToolButton $btnVerify   '✓' (T 'btnVerify') $clrBtn
-        Set-ToolButton $btnRead     '⇩' (T 'btnRead') $clrBtn
-        Set-ToolButton $btnErase    '×' (T 'btnErase') $clrRed
-        Set-ToolButton $btnInfo     'i' (T 'btnInfo') $clrBtnAlt
-        Set-ToolButton $btnFlashSz  '#' (T 'btnFlashSz') $clrBtnAlt
-        Set-ToolButton $btnUnlock   '⌑' (T 'btnUnlock') $clrBtnAlt
-        Set-ToolButton $btnReset    '↻' (T 'btnReset') $clrBtnAlt
-        Set-ToolButton $btnClear    '⌫' (T 'btnClear') $clrBtnAlt
+        Set-ToolButton $btnProgram  'program' (T 'btnProgram') $clrIcon
+        Set-ToolButton $btnVerify   'verify' (T 'btnVerify') $clrIcon
+        Set-ToolButton $btnRead     'read' (T 'btnRead') $clrIcon
+        Set-ToolButton $btnErase    'erase' (T 'btnErase') $clrDangerIcon
+        Set-ToolButton $btnInfo     'info' (T 'btnInfo') $clrIcon
+        Set-ToolButton $btnFlashSz  'flash' (T 'btnFlashSz') $clrIcon
+        Set-ToolButton $btnUnlock   'unlock' (T 'btnUnlock') $clrIcon
+        Set-ToolButton $btnReset    'reset' (T 'btnReset') $clrIcon
+        Set-ToolButton $btnClear    'clear' (T 'btnClear') $clrIcon
     if ($form.Visible) { Fit-Window }
 }
 
