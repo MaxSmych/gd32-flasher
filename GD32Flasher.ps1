@@ -153,6 +153,72 @@ function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300) {
     return $ok
 }
 
+# Разовый запуск OpenOCD с заданным конфигом цели — для перебора при автоопределении.
+function Invoke-OpenOcdOnce([string]$targetCfg, [string[]]$cmds, [int]$waitSec = 15) {
+    try { $ocd = Get-OpenOcd } catch { LogErr $_.Exception.Message; return '' }
+    $out = Join-Path $Work 'probe.out'
+    $err = Join-Path $Work 'probe.err'
+    Remove-Item $out, $err -ErrorAction SilentlyContinue
+
+    $argList = @(
+        '-s', "`"$($ocd.Scripts)`"",
+        '-f', "interface/$($cmbIface.Text).cfg",
+        '-f', "target/$targetCfg.cfg",
+        '-c', "`"adapter speed $($cmbSpeed.Text)`""
+    )
+    foreach ($c in $cmds) { $argList += @('-c', "`"$c`"") }
+
+    try {
+        $p = Start-Process -FilePath $ocd.Exe -ArgumentList $argList -NoNewWindow -PassThru `
+            -RedirectStandardOutput $out -RedirectStandardError $err
+    } catch { return '' }
+
+    $deadline = (Get-Date).AddSeconds($waitSec)
+    while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 50
+    }
+    if (-not $p.HasExited) { try { $p.Kill() } catch { } }
+
+    $text = ''
+    foreach ($f in @($out, $err)) {
+        if (Test-Path $f) { $text += (Get-Content $f -Raw -ErrorAction SilentlyContinue) }
+    }
+    return $text
+}
+
+# Подбирает конфигурацию цели перебором: пользователю не нужно знать, что GD32F330
+# шьётся драйвером с именем stm32f1x.
+function Find-Target {
+    LogHead '=== Автоопределение чипа ==='
+    LogInfo 'Перебираю конфигурации, это занимает до полуминуты.'
+    Set-Busy $true 'Определение чипа...'
+    $found = $null
+    $cpuSeen = $null
+    try {
+        foreach ($t in @('stm32f1x', 'stm32f0x', 'stm32f3x', 'stm32f2x', 'stm32f4x', 'stm32g0x', 'stm32l4x', 'stm32h7x')) {
+            LogInfo "  проверяю: $t"
+            $txt = Invoke-OpenOcdOnce $t @('init; flash probe 0; shutdown')
+            if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
+            if ($txt -match 'flash size = (\d+)\s*KiB' -and $txt -notmatch 'probe failed') {
+                $found = $t
+                LogOk "  подходит: $t — ядро $cpuSeen, Flash $($Matches[1]) КБ"
+                break
+            }
+        }
+    } finally { Set-Busy $false 'Готов' }
+
+    if ($found) {
+        $cmbTarget.Text = $found
+        LogOk "Выбрана конфигурация цели: $found. Теперь нажмите «Подключиться».`r`n"
+    } elseif ($cpuSeen) {
+        LogErr "Ядро определилось ($cpuSeen), но подходящий драйвер Flash не найден среди типовых."
+        LogErr "Выберите конфигурацию цели вручную по документации на чип.`r`n"
+    } else {
+        LogErr "Чип не отвечает. Проверьте питание платы, подключение SWDIO/SWCLK/GND и понизьте частоту до 480 кГц.`r`n"
+    }
+}
+
 function Ocd-Connect {
     if (Ocd-Connected) { return $true }
     try { $ocd = Get-OpenOcd } catch { LogErr $_.Exception.Message; return $false }
@@ -222,6 +288,7 @@ function Set-Connected([bool]$on) {
     foreach ($b in $opButtons) { $b.Enabled = $on }
     $cmbIface.Enabled = -not $on; $cmbTarget.Enabled = -not $on
     $cmbSpeed.Enabled = -not $on; $cmbReset.Enabled = -not $on
+    $btnDetect.Enabled = -not $on
     if (-not $on) { $lblCpu.Text = '--'; $lblId.Text = '--'; $lblFlash.Text = '--'; $lblVolt.Text = '--' }
 }
 
@@ -345,8 +412,13 @@ $cmbReset.DropDownStyle = 'DropDownList'
 $cmbReset.SelectedIndex = 0
 $side.Controls.Add($cmbReset)
 
+$btnDetect = New-Btn 'Определить чип' 270 ([System.Drawing.Color]::FromArgb(70, 90, 110))
+$btnDetect.Location = New-Object System.Drawing.Point(14, 198)
+$btnDetect.Add_Click({ Find-Target })
+$side.Controls.Add($btnDetect)
+
 $btnConnect = New-Btn 'Подключиться' 270 $clrGreen
-$btnConnect.Location = New-Object System.Drawing.Point(14, 200)
+$btnConnect.Location = New-Object System.Drawing.Point(14, 238)
 $btnConnect.Add_Click({ if (Ocd-Connected) { Ocd-Disconnect } else { Ocd-Connect | Out-Null } })
 $side.Controls.Add($btnConnect)
 
@@ -354,19 +426,19 @@ $grpInfo = New-Object System.Windows.Forms.Label
 $grpInfo.Text = 'ИНФОРМАЦИЯ О ЦЕЛИ'; $grpInfo.AutoSize = $true
 $grpInfo.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
 $grpInfo.ForeColor = [System.Drawing.Color]::FromArgb(120, 190, 240)
-$grpInfo.Location = New-Object System.Drawing.Point(14, 258)
+$grpInfo.Location = New-Object System.Drawing.Point(14, 296)
 $side.Controls.Add($grpInfo)
 
-$side.Controls.Add((New-Cap 'Ядро' 14 288));        $lblCpu   = New-Val '--' 150 288; $side.Controls.Add($lblCpu)
-$side.Controls.Add((New-Cap 'Device ID' 14 314));   $lblId    = New-Val '--' 150 314; $side.Controls.Add($lblId)
-$side.Controls.Add((New-Cap 'Объём Flash' 14 340)); $lblFlash = New-Val '--' 150 340; $side.Controls.Add($lblFlash)
-$side.Controls.Add((New-Cap 'Напряжение' 14 366));  $lblVolt  = New-Val '--' 150 366; $side.Controls.Add($lblVolt)
+$side.Controls.Add((New-Cap 'Ядро' 14 326));        $lblCpu   = New-Val '--' 150 326; $side.Controls.Add($lblCpu)
+$side.Controls.Add((New-Cap 'Device ID' 14 352));   $lblId    = New-Val '--' 150 352; $side.Controls.Add($lblId)
+$side.Controls.Add((New-Cap 'Объём Flash' 14 378)); $lblFlash = New-Val '--' 150 378; $side.Controls.Add($lblFlash)
+$side.Controls.Add((New-Cap 'Напряжение' 14 404));  $lblVolt  = New-Val '--' 150 404; $side.Controls.Add($lblVolt)
 
 $hint = New-Object System.Windows.Forms.Label
-$hint.Text = "Связь нестабильна — снизьте частоту до 480 кГц." + [Environment]::NewLine + "Землю программатора вести отдельным проводом рядом с SWDIO/SWCLK."
+$hint.Text = "Не знаете, что выбрать в «Конфигурация цели» — нажмите «Определить чип»." + [Environment]::NewLine + [Environment]::NewLine + "Связь нестабильна — снизьте частоту до 480 кГц. Землю программатора вести отдельным проводом рядом с SWDIO/SWCLK."
 $hint.ForeColor = $clrDim
-$hint.Location = New-Object System.Drawing.Point(14, 410)
-$hint.Size = New-Object System.Drawing.Size(270, 60)
+$hint.Location = New-Object System.Drawing.Point(14, 446)
+$hint.Size = New-Object System.Drawing.Size(270, 110)
 $side.Controls.Add($hint)
 $form.Controls.Add($side)
 
@@ -544,8 +616,10 @@ $form.Add_FormClosing({ $timer.Stop(); Ocd-Disconnect })
 Set-Connected $false
 LogHead 'GD32Flasher готов к работе.'
 LogInfo "Рабочая папка: $Work"
-LogInfo 'Порядок: подключить ST-Link → «Подключиться» → «Считать дамп» → выбрать файл → «Прошить + проверить».'
-LogInfo 'Для GD32F3x0 / F1x0 / F10x / E10x и STM32F1 конфигурация цели — stm32f1x (значение по умолчанию).'
+LogInfo 'Порядок: подключить программатор → «Определить чип» → «Подключиться» → «Считать дамп» → выбрать файл → «Прошить + проверить».'
+LogInfo 'Имена конфигураций цели относятся к типу контроллера Flash, а не к марке чипа:'
+LogInfo '  stm32f1x — это GD32F3x0 (в том числе GD32F330), GD32F1x0, F10x, E10x и STM32F1;'
+LogInfo '  если марка неизвестна или сомневаетесь — просто нажмите «Определить чип».'
 LogInfo ''
 
 [void]$form.ShowDialog()
