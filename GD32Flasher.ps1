@@ -660,9 +660,14 @@ function New-SideCaption {
 function New-SideCombo {
     $combo = New-Object System.Windows.Forms.ComboBox
     $combo.Width = 270
-    $combo.Height = 26
+    $combo.Height = 28
     $combo.FlatStyle = 'Flat'
-    $combo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 4)
+    $combo.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+    $combo.ForeColor = [System.Drawing.Color]::FromArgb(18, 48, 73)
+    $combo.BackColor = [System.Drawing.Color]::FromArgb(234, 244, 250)
+    $combo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 5)
+    $combo.Add_GotFocus({ $_.Sender.BackColor = [System.Drawing.Color]::White })
+    $combo.Add_LostFocus({ $_.Sender.BackColor = [System.Drawing.Color]::FromArgb(234, 244, 250) })
     return $combo
 }
 
