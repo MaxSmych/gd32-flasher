@@ -37,6 +37,12 @@ $script:tcp = $null
 $script:fOut = Join-Path $Work 'ocd.out'
 $script:fErr = Join-Path $Work 'ocd.err'
 $script:pos = @{ out = 0; err = 0 }
+# Хвост недописанной строки: файл читается, пока OpenOCD в него пишет, и последняя
+# строка часто обрывается на середине (в логе было «Info : [s» + «tm32f1x.cpu]»).
+$script:tail = @{ out = ''; err = '' }
+# Всё, что OpenOCD написал в свой лог за время текущей команды: ошибки идут туда,
+# а не в ответ telnet, и без их учёта провал операции выглядел как успех.
+$script:pumped = New-Object Text.StringBuilder
 $script:Lang = 'RU'
 
 # --- локализация ---
@@ -102,6 +108,10 @@ $Str = @{
         logSelected = 'Выбран файл: {0} ({1} байт)'
         logOk       = 'РЕЗУЛЬТАТ: успешно'
         logFail     = 'РЕЗУЛЬТАТ: ошибка'
+        logNoProof  = 'OpenOCD не подтвердил выполнение: «{0}» не дала признака успеха.'
+        logCopyFail = 'Не удалось подготовить прошивку: {0}'
+        logFwReady  = 'Прошивка подготовлена: {0} -> {1} ({2} байт)'
+        logOcdExit  = 'OpenOCD завершился с кодом {0} — смотрите строки выше.'
         logConnOk   = 'Подключено.'
         logConnFail = 'Подключиться не удалось. Проверьте кабель, питание платы и выбранный конфиг цели.'
         logDumpSave = 'Дамп сохранён: {0}'
@@ -192,6 +202,10 @@ $Str = @{
         logSelected = 'Selected file: {0} ({1} bytes)'
         logOk       = 'RESULT: success'
         logFail     = 'RESULT: failed'
+        logNoProof  = 'OpenOCD did not confirm the operation: "{0}" produced no success marker.'
+        logCopyFail = 'Could not prepare the firmware: {0}'
+        logFwReady  = 'Firmware prepared: {0} -> {1} ({2} bytes)'
+        logOcdExit  = 'OpenOCD exited with code {0} - see the lines above.'
         logConnOk   = 'Connected.'
         logConnFail = 'Connection failed. Check the cable, board power and the selected target config.'
         logDumpSave = 'Dump saved: {0}'
@@ -298,7 +312,7 @@ function Parse-Target([string]$line) {
     }
 }
 
-function Pump-Log {
+function Pump-Log([switch]$Final) {
     foreach ($key in @('out', 'err')) {
         $f = if ($key -eq 'out') { $script:fOut } else { $script:fErr }
         if (-not (Test-Path $f)) { continue }
@@ -310,8 +324,22 @@ function Pump-Log {
             $script:pos[$key] = $fs.Position
             $sr.Close(); $fs.Close()
         } catch { continue }
-        foreach ($line in ($chunk -split "`r?`n")) {
-            if ($line -ne '') { Log $line (Line-Color $line); Parse-Target $line }
+        if ($chunk -eq '' -and -not ($Final -and $script:tail[$key] -ne '')) { continue }
+
+        $lines = @(($script:tail[$key] + $chunk) -split "`r?`n")
+        if ($Final) {
+            $script:tail[$key] = ''
+        } else {
+            # последнюю строку придерживаем: перевода строки ещё не было, она дописывается
+            $script:tail[$key] = $lines[-1]
+            $lines = if ($lines.Count -gt 1) { $lines[0..($lines.Count - 2)] } else { @() }
+        }
+        foreach ($line in $lines) {
+            if ($line -ne '') {
+                Log $line (Line-Color $line)
+                Parse-Target $line
+                [void]$script:pumped.AppendLine($line)
+            }
         }
     }
 }
@@ -337,6 +365,11 @@ function Require-Connection {
 function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
     if (-not (Ocd-Connected)) { LogErr (T 'logNoConn'); return $null }
     $ns = $script:tcp.GetStream()
+    # OpenOCD шлёт в telnet и асинхронные сообщения (external reset detected и т.п.).
+    # Если не выбрать их до отправки, они попадают в ответ вместе с лишними промптами,
+    # и результаты команд съезжают на команду вперёд. В лог они всё равно приходят
+    # вторым путём — из файла лога OpenOCD.
+    while ($ns.DataAvailable) { $drain = New-Object byte[] 4096; [void]$ns.Read($drain, 0, $drain.Length) }
     $bytes = [Text.Encoding]::ASCII.GetBytes("$cmd`n")
     $ns.Write($bytes, 0, $bytes.Length); $ns.Flush()
 
@@ -354,17 +387,37 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
         }
     }
     $text = $sb.ToString() -replace '>\s*$', ''
-    $lines = @($text -split "`r?`n" | Where-Object { $_ -ne '' -and $_ -ne $cmd })
+    $lines = @($text -split "`r?`n" | ForEach-Object { $_ -replace '^>\s*', '' } | Where-Object { $_ -ne '' -and $_ -ne $cmd })
     foreach ($l in $lines) { Log $l (Line-Color $l); Parse-Target $l }
     return ($lines -join "`n")
 }
 
-function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300) {
+# $expect — обязательный признак успеха (wrote N bytes, verified N bytes и т.п.).
+# Без него операция считается успешной по отсутствию ошибок, а этого мало: запись
+# падала с «Error: couldn't open ...», ошибка уходила в лог OpenOCD мимо ответа
+# telnet, и результат рапортовался как успешный.
+function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300, [string]$expect = '') {
     LogHead "=== $title ==="
     Set-Busy $true $title
-    try { $out = Ocd-Send $cmd $timeoutSec } finally { Set-Busy $false (T 'stReady') }
+    [void]$script:pumped.Clear()
+    try {
+        $out = Ocd-Send $cmd $timeoutSec
+        Pump-Log
+    } finally { Set-Busy $false (T 'stReady') }
     if ($null -eq $out) { return $false }
-    $ok = ($out -notmatch '(?im)^\s*error|failed|timed out')
+
+    # Эту строку OpenOCD печатает как Error, хотя следом идёт обычное побайтовое
+    # сравнение и штатное «verified N bytes» — ошибкой она не является.
+    $noise = 'checksum mismatch - attempting binary compare'
+    $logged = (($script:pumped.ToString() -split "`r?`n") | Where-Object { $_ -notmatch $noise }) -join "`n"
+    # Info/Warn ошибками не считаем: «Warn : STM32 flash size failed» — норма для GD32.
+    $answer = (($out -split "`r?`n") | Where-Object { $_ -notmatch $noise -and $_ -notmatch '(?i)^\s*(info|warn|debug)\s*:' }) -join "`n"
+    # В логе OpenOCD ошибка — строго строка «Error: ...».
+    $ok = ($answer -notmatch '(?im)^\s*(error\b|.*\bfailed\b|.*timed out)') -and ($logged -notmatch '(?m)^\s*Error:')
+    if ($ok -and $expect -ne '') {
+        $ok = (($out + "`n" + $logged) -match $expect)
+        if (-not $ok) { LogErr ((T 'logNoProof') -f $title) }
+    }
     if ($ok) { LogOk ((T 'logOk') + "`r`n") } else { LogErr ((T 'logFail') + "`r`n") }
     return $ok
 }
@@ -376,11 +429,16 @@ function Invoke-OpenOcdOnce([string]$targetCfg, [string[]]$cmds, [int]$waitSec =
     $err = Join-Path $Work 'probe.err'
     Remove-Item $out, $err -ErrorAction SilentlyContinue
 
+    # Пробный запуск не должен занимать порты рабочей сессии: иначе следующее
+    # «Подключиться» не получит 4444 и молча отваливается по таймауту.
     $argList = @(
         '-s', "`"$($ocd.Scripts)`"",
         '-f', "interface/$($cmbIface.Text).cfg",
         '-f', "target/$targetCfg.cfg",
-        '-c', "`"adapter speed $($cmbSpeed.Text)`""
+        '-c', "`"adapter speed $($cmbSpeed.Text)`"",
+        '-c', '"gdb_port disabled"',
+        '-c', '"tcl_port disabled"',
+        '-c', '"telnet_port disabled"'
     )
     foreach ($c in $cmds) { $argList += @('-c', "`"$c`"") }
 
@@ -395,6 +453,9 @@ function Invoke-OpenOcdOnce([string]$targetCfg, [string[]]$cmds, [int]$waitSec =
         Start-Sleep -Milliseconds 50
     }
     if (-not $p.HasExited) { try { $p.Kill() } catch { } }
+    # ждём фактического выхода: пока процесс жив, он держит ST-Link, и следующий
+    # запуск получит «open failed»
+    try { [void]$p.WaitForExit(3000) } catch { }
 
     $text = ''
     foreach ($f in @($out, $err)) {
@@ -440,6 +501,7 @@ function Ocd-Connect {
 
     Remove-Item $script:fOut, $script:fErr -ErrorAction SilentlyContinue
     $script:pos = @{ out = 0; err = 0 }
+    $script:tail = @{ out = ''; err = '' }
 
     $argList = @(
         '-s', "`"$($ocd.Scripts)`"",
@@ -471,7 +533,7 @@ function Ocd-Connect {
         }
     } finally { Set-Busy $false (T 'stReady') }
 
-    Pump-Log
+    Pump-Log -Final
     if (Ocd-Connected) {
         Start-Sleep -Milliseconds 200
         $ns = $script:tcp.GetStream()
@@ -482,6 +544,9 @@ function Ocd-Connect {
         LogOk ((T 'logConnOk') + "`r`n")
         return $true
     }
+    # Раньше провал подключения выглядел как пустой лог: OpenOCD успевал написать
+    # причину, но её никто не показывал.
+    if ($script:proc -and $script:proc.HasExited) { LogErr ((T 'logOcdExit') -f $script:proc.ExitCode) }
     LogErr ((T 'logConnFail') + "`r`n")
     Ocd-Disconnect
     return $false
@@ -491,7 +556,9 @@ function Ocd-Disconnect {
     if (Ocd-Connected) { try { Ocd-Send 'shutdown' 5 | Out-Null } catch { } ; $script:tcp.Close() }
     $script:tcp = $null
     if ($script:proc -and -not $script:proc.HasExited) { try { $script:proc.Kill() } catch { } }
+    if ($script:proc) { try { [void]$script:proc.WaitForExit(3000) } catch { } }
     $script:proc = $null
+    Pump-Log -Final
     Set-Connected $false
 }
 
@@ -500,7 +567,7 @@ function Set-Connected([bool]$on) {
     $lblConn.ForeColor = if ($on) { [System.Drawing.Color]::FromArgb(120, 220, 120) } else { [System.Drawing.Color]::FromArgb(220, 130, 130) }
     $btnConnect.Text = if ($on) { T 'btnDisconn' } else { T 'btnConnect' }
     $btnConnect.BackColor = if ($on) { $clrRed } else { $clrGreen }
-        foreach ($b in $opButtons) { $b.Enabled = $true }
+    foreach ($b in $opButtons) { $b.Enabled = $on }
     $cmbIface.Enabled = -not $on; $cmbTarget.Enabled = -not $on
     $cmbSpeed.Enabled = -not $on; $cmbReset.Enabled = -not $on
     $btnDetect.Enabled = -not $on
@@ -508,17 +575,28 @@ function Set-Connected([bool]$on) {
 }
 
 function Get-Fw {
-    if (-not (Test-Path $txtFile.Text)) { LogErr (T 'logNoFile'); return $null }
+    # -PathType Leaf: у папки Test-Path тоже истинен, и её копия делала из fw.bin
+    # каталог — OpenOCD отвечал «couldn't open», а операция считалась успешной.
+    if (-not (Test-Path -LiteralPath $txtFile.Text -PathType Leaf)) { LogErr (T 'logNoFile'); return $null }
     # копия в латинский путь без пробелов — снимает проблемы с кириллицей и длинными именами
     $dst = Join-Path $Work 'fw.bin'
-    Copy-Item $txtFile.Text $dst -Force
+    try {
+        Copy-Item -LiteralPath $txtFile.Text -Destination $dst -Force -ErrorAction Stop
+    } catch {
+        LogErr ((T 'logCopyFail') -f $_.Exception.Message)
+        return $null
+    }
+    if (-not (Test-Path -LiteralPath $dst -PathType Leaf)) { LogErr ((T 'logCopyFail') -f $dst); return $null }
+    LogInfo ((T 'logFwReady') -f $txtFile.Text, $dst, (Get-Item -LiteralPath $dst).Length)
     return $dst
 }
 
 function Invoke-Backup {
     $name = 'backup_{0:yyyyMMdd_HHmmss}.bin' -f (Get-Date)
     $dst = Join-Path $Work $name
-    $ok = Ocd-Run "dump_image $(ConvertTo-TclPath $dst) $($txtAddr.Text) $($txtSize.Text)" ((T 'ttlBackup') -f $name)
+    $ok = Ocd-Run "dump_image $(ConvertTo-TclPath $dst) $($txtAddr.Text) $($txtSize.Text)" ((T 'ttlBackup') -f $name) 300 'dumped\s+\d+\s+bytes'
+    # бэкап без файла на диске — не бэкап, дальше идти нельзя
+    if ($ok -and -not (Test-Path -LiteralPath $dst -PathType Leaf)) { $ok = $false; LogErr ((T 'logNoProof') -f $name) }
     if ($ok) { LogOk ((T 'logDumpSave') -f $dst) }
     return $ok
 }
@@ -890,8 +968,8 @@ $btnProgram.Add_Click({
     if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
     $t = ConvertTo-TclPath $fw
     if (Ocd-Run 'reset halt' (T 'ttlHalt') 30) {
-        if (Ocd-Run "flash write_image erase $t $($txtAddr.Text)" (T 'ttlWrite')) {
-            if (Ocd-Run "verify_image $t $($txtAddr.Text)" (T 'ttlVerify')) {
+        if (Ocd-Run "flash write_image erase $t $($txtAddr.Text)" (T 'ttlWrite') 300 'wrote\s+\d+\s+bytes') {
+            if (Ocd-Run "verify_image $t $($txtAddr.Text)" (T 'ttlVerify') 300 'verified\s+\d+\s+bytes') {
                 Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null
             }
         }
@@ -903,7 +981,7 @@ $btnVerify.Add_Click({
     if (-not (Require-Connection)) { return }
     $fw = Get-Fw; if (-not $fw) { return }
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
-    Ocd-Run "verify_image $(ConvertTo-TclPath $fw) $($txtAddr.Text)" (T 'ttlVerify') | Out-Null
+    Ocd-Run "verify_image $(ConvertTo-TclPath $fw) $($txtAddr.Text)" (T 'ttlVerify') 300 'verified\s+\d+\s+bytes' | Out-Null
 })
 
 $btnRead = New-Btn '' $clrBtn
@@ -914,8 +992,8 @@ $btnRead.Add_Click({
     if ($d.ShowDialog() -ne 'OK') { return }
     $tmp = Join-Path $Work 'dump.bin'
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
-    if (Ocd-Run "dump_image $(ConvertTo-TclPath $tmp) $($txtAddr.Text) $($txtSize.Text)" (T 'ttlRead')) {
-        Copy-Item $tmp $d.FileName -Force
+    if (Ocd-Run "dump_image $(ConvertTo-TclPath $tmp) $($txtAddr.Text) $($txtSize.Text)" (T 'ttlRead') 300 'dumped\s+\d+\s+bytes') {
+        Copy-Item -LiteralPath $tmp -Destination $d.FileName -Force
         LogOk ((T 'logDumpSave') -f $d.FileName)
     }
 })
@@ -1118,7 +1196,6 @@ function Apply-Language {
 # не запустилась.
 $form.Add_Shown({
     $form.Activate()
-    foreach ($b in $opButtons) { $b.Enabled = $true }
     $btnDetect.Enabled = $false; $btnConnect.Enabled = $false
     Set-Busy $true (T 'stPrepare')
     LogHead (T 'ttlPrepare')
