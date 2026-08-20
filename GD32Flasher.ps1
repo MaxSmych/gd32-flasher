@@ -63,7 +63,8 @@ $Str = @{
         capVolt     = 'Напряжение'
         hint        = "Не знаете, что выбрать в «Конфигурация цели» — нажмите «Определить чип».`r`n`r`nСвязь нестабильна — снизьте частоту до 480 кГц. Землю программатора вести отдельным проводом рядом с SWDIO/SWCLK."
         capFile     = 'Файл прошивки'
-        btnBrowse   = 'Обзор...'
+        btnBrowse   = 'Выбрать файл...'
+        tipFile     = 'Файл .bin или .hex, который будет записан в микроконтроллер. Файл можно перетащить сюда мышью. Для чтения дампа файл не нужен.'
         capAddr     = 'Адрес'
         capSize     = 'Размер чтения'
         chkBackup   = 'Резервный дамп перед стиранием и прошивкой'
@@ -74,7 +75,15 @@ $Str = @{
         btnInfo     = 'Информация'
         btnUnlock   = 'Снять защиту'
         btnReset    = 'Сброс и запуск'
+        btnFlashSz  = 'Объём Flash'
         btnClear    = 'Очистить лог'
+        ttlFlashSz  = 'Определение объёма Flash'
+        fsFromReg   = 'Регистр размера {0} сообщает: {1} КБ.'
+        fsProbe     = 'Регистр размера не заполнен — проверяю чтением границ.'
+        fsProbeHit  = 'Читается адрес до конца {0} КБ — объём не меньше этого.'
+        fsSet       = 'Объём Flash: {0} КБ. Поле «Размер чтения» заполнено ({1}).'
+        fsMirror    = 'Внимание: адрес за границей часто читается как зеркало начала Flash. Если объём получился больше ожидаемого — сверьтесь с маркировкой чипа.'
+        fsFail      = 'Определить объём не удалось. Смотрите маркировку чипа: 8 = 64 КБ, B = 128 КБ, C = 256 КБ, E = 512 КБ.'
         capLang     = 'Язык'
         stReady     = 'Готов'
         stBusy      = 'Выполняется...'
@@ -144,7 +153,8 @@ $Str = @{
         capVolt     = 'Voltage'
         hint        = "Not sure what to pick in Target config? Press Detect chip.`r`n`r`nUnstable link: lower the speed to 480 kHz. Run the probe ground as a separate wire next to SWDIO/SWCLK."
         capFile     = 'Firmware file'
-        btnBrowse   = 'Browse...'
+        btnBrowse   = 'Choose file...'
+        tipFile     = 'The .bin or .hex file to be written into the microcontroller. You can drag and drop a file here. Not needed for reading a dump.'
         capAddr     = 'Address'
         capSize     = 'Read size'
         chkBackup   = 'Back up flash before erase and program'
@@ -155,7 +165,15 @@ $Str = @{
         btnInfo     = 'Information'
         btnUnlock   = 'Remove protection'
         btnReset    = 'Reset and run'
+        btnFlashSz  = 'Flash size'
         btnClear    = 'Clear log'
+        ttlFlashSz  = 'Detecting flash size'
+        fsFromReg   = 'Size register {0} reports: {1} KB.'
+        fsProbe     = 'The size register is empty - probing by reading boundaries.'
+        fsProbeHit  = 'Address at the end of {0} KB reads fine - the flash is at least that big.'
+        fsSet       = 'Flash size: {0} KB. The read size field is filled in ({1}).'
+        fsMirror    = 'Note: past the end, flash often mirrors its beginning. If the size looks larger than expected, check the chip marking.'
+        fsFail      = 'Could not determine the size. Check the chip marking: 8 = 64 KB, B = 128 KB, C = 256 KB, E = 512 KB.'
         capLang     = 'Language'
         stReady     = 'Ready'
         stBusy      = 'Working...'
@@ -547,24 +565,35 @@ $subtitle = New-Object System.Windows.Forms.Label
 $subtitle.ForeColor = $clrDim; $subtitle.AutoSize = $true
 $subtitle.Location = New-Object System.Drawing.Point(152, 21)
 
+# правая часть шапки — потоком справа налево, чтобы не считать координаты вручную
+$hdrRight = New-Object System.Windows.Forms.FlowLayoutPanel
+$hdrRight.Dock = 'Right'
+$hdrRight.FlowDirection = 'RightToLeft'
+$hdrRight.WrapContents = $false
+$hdrRight.Width = 420
+$hdrRight.Padding = New-Object System.Windows.Forms.Padding(0, 16, 16, 0)
+$hdrRight.BackColor = $clrHeader
+
 $lblConn = New-Object System.Windows.Forms.Label
-$lblConn.AutoSize = $true; $lblConn.Anchor = 'Top,Right'
-$lblConn.Location = New-Object System.Drawing.Point(($form.ClientSize.Width - 190), 20)
+$lblConn.AutoSize = $true
+$lblConn.Margin = New-Object System.Windows.Forms.Padding(0, 4, 0, 0)
 
-$capLang = New-Object System.Windows.Forms.Label
-$capLang.AutoSize = $true; $capLang.Anchor = 'Top,Right'
-$capLang.ForeColor = $clrDim
-$capLang.Location = New-Object System.Drawing.Point(($form.ClientSize.Width - 340), 21)
-
-$cmbLang = New-Combo ($form.ClientSize.Width - 285) 18 70
-$cmbLang.Anchor = 'Top,Right'
+$cmbLang = New-Object System.Windows.Forms.ComboBox
+$cmbLang.Size = New-Object System.Drawing.Size(70, 24)
+$cmbLang.FlatStyle = 'Flat'
 $cmbLang.DropDownStyle = 'DropDownList'
+$cmbLang.Margin = New-Object System.Windows.Forms.Padding(28, 0, 0, 0)
 [void]$cmbLang.Items.AddRange(@('RU', 'EN'))
 $cmbLang.SelectedItem = 'RU'
 $cmbLang.Add_SelectedIndexChanged({ $script:Lang = $cmbLang.SelectedItem; Apply-Language })
 
-$header.Controls.AddRange(@($title, $subtitle, $capLang, $cmbLang, $lblConn))
-$form.Controls.Add($header)
+$capLang = New-Object System.Windows.Forms.Label
+$capLang.AutoSize = $true
+$capLang.ForeColor = $clrDim
+$capLang.Margin = New-Object System.Windows.Forms.Padding(0, 4, 8, 0)
+
+$hdrRight.Controls.AddRange(@($lblConn, $cmbLang, $capLang))
+$header.Controls.AddRange(@($hdrRight, $title, $subtitle))
 
 # правая панель — подключение и информация о цели
 $side = New-Object System.Windows.Forms.Panel
@@ -635,27 +664,45 @@ $hint.ForeColor = $clrDim
 $hint.Location = New-Object System.Drawing.Point(16, 456)
 $hint.Size = New-Object System.Drawing.Size(274, 130)
 $side.Controls.Add($hint)
-$form.Controls.Add($side)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
 $main.Dock = 'Fill'; $main.Padding = New-Object System.Windows.Forms.Padding(16, 12, 16, 8)
+
+# Докирование идёт в обратном порядке добавления: добавленный последним получает
+# место первым. Поэтому Fill добавляем раньше всех, а шапку — последней, иначе
+# центральная панель уезжает под шапку и под правую панель.
 $form.Controls.Add($main)
+$form.Controls.Add($side)
+$form.Controls.Add($header)
 
 $rowFile = New-Object System.Windows.Forms.Panel
 $rowFile.Dock = 'Top'; $rowFile.Height = 34
+$rowFile.Padding = New-Object System.Windows.Forms.Padding(0, 5, 0, 5)
 $capFile = New-Object System.Windows.Forms.Label
-$capFile.ForeColor = $clrDim; $capFile.AutoSize = $true
-$capFile.Location = New-Object System.Drawing.Point(2, 8)
+$capFile.ForeColor = $clrDim; $capFile.AutoSize = $false
+$capFile.Dock = 'Left'; $capFile.Width = 128
+$capFile.TextAlign = 'MiddleLeft'
 $txtFile = New-Object System.Windows.Forms.TextBox
-$txtFile.Location = New-Object System.Drawing.Point(130, 5)
-$txtFile.Size = New-Object System.Drawing.Size(520, 24)
-$txtFile.Anchor = 'Top,Left,Right'
+$txtFile.Dock = 'Fill'
+$txtFile.AllowDrop = $true
+$txtFile.Add_DragEnter({
+    if ($_.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+        $_.Effect = [System.Windows.Forms.DragDropEffects]::Copy
+    }
+})
+$txtFile.Add_DragDrop({
+    $files = $_.Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
+    if ($files -and $files.Count -gt 0) {
+        $txtFile.Text = $files[0]
+        LogInfo ((T 'logSelected') -f $files[0], (Get-Item $files[0]).Length)
+    }
+})
 $btnBrowse = New-Btn '' $clrBtn
 $btnBrowse.AutoSize = $false
-$btnBrowse.Size = New-Object System.Drawing.Size(110, 26)
-$btnBrowse.Location = New-Object System.Drawing.Point(660, 4)
-$btnBrowse.Anchor = 'Top,Right'
+$btnBrowse.Dock = 'Right'
+$btnBrowse.Width = 110
+$btnBrowse.Margin = New-Object System.Windows.Forms.Padding(8, 0, 0, 0)
 $btnBrowse.Add_Click({
     $d = New-Object System.Windows.Forms.OpenFileDialog
     $d.Filter = T 'dlgFw'
@@ -664,7 +711,8 @@ $btnBrowse.Add_Click({
         LogInfo ((T 'logSelected') -f $d.FileName, (Get-Item $d.FileName).Length)
     }
 })
-$rowFile.Controls.AddRange(@($capFile, $txtFile, $btnBrowse))
+# порядок обратный докированию: Fill добавляем первым, боковые — после
+$rowFile.Controls.AddRange(@($txtFile, $btnBrowse, $capFile))
 
 $rowAddr = New-Object System.Windows.Forms.Panel
 $rowAddr.Dock = 'Top'; $rowAddr.Height = 38
@@ -759,11 +807,62 @@ $btnUnlock.Add_Click({
 $btnReset = New-Btn '' $clrBtn
 $btnReset.Add_Click({ Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null })
 
+# OpenOCD берёт объём Flash из регистра размера, а клоны его часто не заполняют
+# («STM32 flash size failed, probe inaccurate»). Определяем сами: сначала регистр
+# по адресам разных семейств, затем — чтением границ.
+$btnFlashSz = New-Btn '' $clrBtn
+$btnFlashSz.Add_Click({
+    LogHead ('=== ' + (T 'ttlFlashSz') + ' ===')
+    Set-Busy $true (T 'ttlFlashSz')
+    $kb = 0
+    try {
+        Ocd-Send 'reset halt' 30 | Out-Null
+        foreach ($reg in @('0x1FFFF7E0', '0x1FFFF7CC', '0x1FFF7A22', '0x1FFF75E0')) {
+            $out = Ocd-Send "mdw $reg 1" 20
+            if ($out -match ':\s*([0-9a-fA-F]{8})') {
+                $v = [Convert]::ToUInt32($Matches[1], 16) -band 0xFFFF
+                if ($v -ge 16 -and $v -le 4096) {
+                    $kb = $v
+                    LogOk ((T 'fsFromReg') -f $reg, $kb)
+                    break
+                }
+            }
+        }
+        if ($kb -eq 0) {
+            LogInfo (T 'fsProbe')
+            $base = [uint32]$txtAddr.Text
+            foreach ($try in @(1024, 512, 256, 128, 64, 32, 16)) {
+                $addr = '0x{0:X8}' -f ($base + $try * 1024 - 4)
+                $out = Ocd-Send "mdw $addr 1" 20
+                if ($out -and $out -notmatch '(?i)error|failed|invalid') {
+                    $kb = $try
+                    LogInfo ((T 'fsProbeHit') -f $try)
+                    LogInfo (T 'fsMirror')
+                    break
+                }
+            }
+        }
+    } finally { Set-Busy $false (T 'stReady') }
+
+    if ($kb -gt 0) {
+        $hex = '0x{0:X}' -f ($kb * 1024)
+        $txtSize.Text = $hex
+        $lblFlash.Text = "$kb KB"
+        LogOk (((T 'fsSet') -f $kb, $hex) + "`r`n")
+    } else {
+        LogErr ((T 'fsFail') + "`r`n")
+    }
+})
+
 $btnClear = New-Btn '' $clrBtnAlt
 $btnClear.Add_Click({ $log.Clear() })
 
-$opButtons = @($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnUnlock, $btnReset)
-$rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnUnlock, $btnReset, $btnClear))
+$tip = New-Object System.Windows.Forms.ToolTip
+$tip.AutoPopDelay = 15000
+$tip.InitialDelay = 400
+
+$opButtons = @($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset)
+$rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset, $btnClear))
 
 $log = New-Object System.Windows.Forms.RichTextBox
 $log.Dock = 'Fill'
@@ -791,8 +890,23 @@ $main.Controls.Add($rowAddr)
 $main.Controls.Add($rowFile)
 $main.Controls.Add($statusBar)
 
+# Ширина окна под один ряд кнопок: подписи меняются вместе с языком, поэтому
+# считаем по фактической ширине кнопок, а не по угаданной константе.
+function Fit-Window {
+    $need = 0
+    foreach ($b in $rowBtns.Controls) { $need += $b.Width + $b.Margin.Left + $b.Margin.Right }
+    $need += $main.Padding.Left + $main.Padding.Right + $side.Width + 26
+    $area = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
+    $w = [Math]::Min($need, $area.Width - 40)
+    if ($w -gt $form.Width) {
+        $form.Width = $w
+        $form.Left = $area.X + [int](($area.Width - $form.Width) / 2)
+    }
+}
+
 function Apply-Language {
     $subtitle.Text  = T 'subtitle'
+    $subtitle.Left  = $title.Right + 14
     $capLang.Text   = T 'capLang'
     $grpConn.Text   = T 'grpConn'
     $capIface.Text  = T 'capIface'
@@ -817,6 +931,7 @@ function Apply-Language {
     $btnInfo.Text   = T 'btnInfo'
     $btnUnlock.Text = T 'btnUnlock'
     $btnReset.Text  = T 'btnReset'
+    $btnFlashSz.Text= T 'btnFlashSz'
     $btnClear.Text  = T 'btnClear'
     $btnDetect.Text = T 'btnDetect'
 
@@ -828,6 +943,10 @@ function Apply-Language {
     $lblConn.Text = if (Ocd-Connected) { T 'connected' } else { T 'disconnected' }
     $btnConnect.Text = if (Ocd-Connected) { T 'btnDisconn' } else { T 'btnConnect' }
     if ($lblStatus.Text -eq '' -or -not (Ocd-Connected)) { $lblStatus.Text = T 'stReady' }
+
+    $tip.SetToolTip($txtFile, (T 'tipFile'))
+    $tip.SetToolTip($btnBrowse, (T 'tipFile'))
+    if ($form.Visible) { Fit-Window }
 }
 
 # Подготовка идёт ПОСЛЕ показа окна: на новой машине распаковка OpenOCD занимает
@@ -858,6 +977,7 @@ $form.Add_Shown({
         LogInfo ''
         $btnConnect.Enabled = $true
         $btnDetect.Enabled = $true
+        Fit-Window
     } catch {
         LogErr $_.Exception.Message
         LogErr (T 'logNoOcd')
