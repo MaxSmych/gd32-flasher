@@ -16,6 +16,14 @@ Add-Type -Name Win -Namespace Native -MemberDefinition @'
 $hWnd = [Native.Win]::GetConsoleWindow()
 if ($hWnd -ne [IntPtr]::Zero) { [void][Native.Win]::ShowWindow($hWnd, 0) }
 
+# Один экземпляр: параллельные запуски рвут друг другу распаковку OpenOCD.
+$created = $false
+$script:mutex = New-Object System.Threading.Mutex($true, 'GD32Flasher_singleton', [ref]$created)
+if (-not $created) {
+    [System.Windows.Forms.MessageBox]::Show('GD32Flasher уже запущен. Проверьте панель задач.', 'GD32Flasher', 'OK', 'Information') | Out-Null
+    exit
+}
+
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -553,7 +561,6 @@ $btnUnlock.Add_Click({
     $msg = 'Снятие защиты выполняет полное стирание кристалла (mass erase). Продолжить?' + [Environment]::NewLine + [Environment]::NewLine + 'После операции обязательно снять и подать питание платы: option bytes применяются только по power-on reset.'
     if ([System.Windows.Forms.MessageBox]::Show($msg, 'Подтверждение', 'YesNo', 'Warning') -ne 'Yes') { return }
     if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr 'Операция отменена: не удалось снять дамп.'; return }
-    $drv = ($cmbTarget.Text -replace '\d.*$', '') # stm32f1x -> stm32f1
     Ocd-Run 'reset halt' 'Остановка ядра' 30 | Out-Null
     Ocd-Run "$($cmbTarget.Text) unlock 0" 'Снятие защиты' | Out-Null
 })
@@ -593,18 +600,41 @@ $main.Controls.Add($rowAddr)
 $main.Controls.Add($rowFile)
 $main.Controls.Add($statusBar)
 
-# заполняем списки тем, что реально есть в поставке OpenOCD
-try {
-    $ocd = Get-OpenOcd
-    Get-ChildItem (Join-Path $ocd.Scripts 'interface') -Filter *.cfg -Recurse |
-        ForEach-Object { [void]$cmbIface.Items.Add($_.BaseName) }
-    Get-ChildItem (Join-Path $ocd.Scripts 'target') -Filter *.cfg |
-        ForEach-Object { [void]$cmbTarget.Items.Add($_.BaseName) }
-    $cmbIface.Text = if ($cmbIface.Items.Contains('stlink')) { 'stlink' } else { $cmbIface.Items[0] }
-    $cmbTarget.Text = 'stm32f1x'
-} catch {
-    LogErr $_.Exception.Message
-}
+# Подготовка идёт ПОСЛЕ показа окна: на новой машине распаковка OpenOCD занимает
+# до минуты, и раньше всё это время на экране не было ничего — казалось, что программа
+# не запустилась.
+$form.Add_Shown({
+    $form.Activate()
+    foreach ($b in $opButtons) { $b.Enabled = $false }
+    $btnDetect.Enabled = $false; $btnConnect.Enabled = $false
+    Set-Busy $true 'Подготовка: распаковка OpenOCD (при первом запуске — до минуты)'
+    LogHead '=== Подготовка ==='
+    LogInfo 'Распаковываю OpenOCD, при первом запуске это занимает до минуты...'
+    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        $ocd = Get-OpenOcd
+        Get-ChildItem (Join-Path $ocd.Scripts 'interface') -Filter *.cfg -Recurse |
+            ForEach-Object { [void]$cmbIface.Items.Add($_.BaseName) }
+        Get-ChildItem (Join-Path $ocd.Scripts 'target') -Filter *.cfg |
+            ForEach-Object { [void]$cmbTarget.Items.Add($_.BaseName) }
+        $cmbIface.Text = if ($cmbIface.Items.Contains('stlink')) { 'stlink' } else { $cmbIface.Items[0] }
+        $cmbTarget.Text = 'stm32f1x'
+        LogOk "Готово: $($cmbIface.Items.Count) программаторов, $($cmbTarget.Items.Count) конфигураций целей."
+        LogInfo ''
+        LogInfo 'Порядок: подключить программатор → «Определить чип» → «Подключиться» → «Считать дамп» → выбрать файл → «Прошить + проверить».'
+        LogInfo 'Имена конфигураций цели относятся к типу контроллера Flash, а не к марке чипа:'
+        LogInfo '  stm32f1x — это GD32F3x0 (в том числе GD32F330), GD32F1x0, F10x, E10x и STM32F1;'
+        LogInfo '  если марка неизвестна или сомневаетесь — просто нажмите «Определить чип».'
+        LogInfo ''
+        $btnConnect.Enabled = $true
+        $btnDetect.Enabled = $true
+    } catch {
+        LogErr $_.Exception.Message
+        LogErr 'Без OpenOCD работа невозможна. Проверьте, что рядом с программой лежит папка tools с архивом.'
+    } finally {
+        Set-Busy $false 'Готов'
+    }
+})
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 250
@@ -614,12 +644,8 @@ $timer.Start()
 $form.Add_FormClosing({ $timer.Stop(); Ocd-Disconnect })
 
 Set-Connected $false
-LogHead 'GD32Flasher готов к работе.'
+LogHead 'GD32Flasher'
 LogInfo "Рабочая папка: $Work"
-LogInfo 'Порядок: подключить программатор → «Определить чип» → «Подключиться» → «Считать дамп» → выбрать файл → «Прошить + проверить».'
-LogInfo 'Имена конфигураций цели относятся к типу контроллера Flash, а не к марке чипа:'
-LogInfo '  stm32f1x — это GD32F3x0 (в том числе GD32F330), GD32F1x0, F10x, E10x и STM32F1;'
-LogInfo '  если марка неизвестна или сомневаетесь — просто нажмите «Определить чип».'
-LogInfo ''
 
 [void]$form.ShowDialog()
+$script:mutex.ReleaseMutex()
