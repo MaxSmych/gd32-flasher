@@ -814,6 +814,8 @@ $btnBrowse = New-Btn '' $clrBtn
 $btnBrowse.AutoSize = $false
 $btnBrowse.Dock = 'Fill'
 $btnBrowse.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 0)
+$btnBrowse.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+$btnBrowse.FlatAppearance.BorderSize = 0
 $btnBrowse.Add_Click({
     $d = New-Object System.Windows.Forms.OpenFileDialog
     $d.Filter = T 'dlgFw'
@@ -1082,7 +1084,7 @@ function Apply-Language {
     $capVolt.Text   = T 'capVolt'
     $hint.Text      = T 'hint'
     $capFile.Text   = T 'capFile'
-    $btnBrowse.Text = T 'btnBrowse'
+        $btnBrowse.Text = if ($script:Lang -eq 'RU') { 'Файл' } else { 'Browse' }
     $capAddr.Text   = T 'capAddr'
     $capSize.Text   = T 'capSize'
     $chkBackup.Text = T 'chkBackup'
