@@ -24,6 +24,7 @@ if (-not $created) {
     exit
 }
 
+$AppVersion = '1.3.0'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -36,16 +37,189 @@ $script:tcp = $null
 $script:fOut = Join-Path $Work 'ocd.out'
 $script:fErr = Join-Path $Work 'ocd.err'
 $script:pos = @{ out = 0; err = 0 }
+$script:Lang = 'RU'
+
+# --- локализация ---
+
+$Str = @{
+    RU = @{
+        subtitle    = 'OpenOCD + ST-Link'
+        connected   = '● Подключено'
+        disconnected= '● Не подключено'
+        grpConn     = 'ПОДКЛЮЧЕНИЕ'
+        capIface    = 'Программатор'
+        capTarget   = 'Конфигурация цели'
+        capSpeed    = 'Частота SWD, кГц'
+        capReset    = 'Сброс'
+        resetSoft   = 'Программный'
+        resetHard   = 'Аппаратный (SRST)'
+        btnDetect   = 'Определить чип'
+        btnConnect  = 'Подключиться'
+        btnDisconn  = 'Отключиться'
+        grpInfo     = 'ИНФОРМАЦИЯ О ЦЕЛИ'
+        capCore     = 'Ядро'
+        capId       = 'Device ID'
+        capFlash    = 'Объём Flash'
+        capVolt     = 'Напряжение'
+        hint        = "Не знаете, что выбрать в «Конфигурация цели» — нажмите «Определить чип».`r`n`r`nСвязь нестабильна — снизьте частоту до 480 кГц. Землю программатора вести отдельным проводом рядом с SWDIO/SWCLK."
+        capFile     = 'Файл прошивки'
+        btnBrowse   = 'Обзор...'
+        capAddr     = 'Адрес'
+        capSize     = 'Размер чтения'
+        chkBackup   = 'Резервный дамп перед стиранием и прошивкой'
+        btnProgram  = 'Прошить + проверить'
+        btnVerify   = 'Только проверить'
+        btnRead     = 'Считать дамп'
+        btnErase    = 'Стереть'
+        btnInfo     = 'Информация'
+        btnUnlock   = 'Снять защиту'
+        btnReset    = 'Сброс и запуск'
+        btnClear    = 'Очистить лог'
+        capLang     = 'Язык'
+        stReady     = 'Готов'
+        stBusy      = 'Выполняется...'
+        stPrepare   = 'Подготовка: распаковка OpenOCD (при первом запуске — до минуты)'
+        stDetect    = 'Определение чипа...'
+        stConnect   = 'Подключение...'
+        logPrepare  = 'Распаковываю OpenOCD, при первом запуске это занимает до минуты...'
+        logReady    = 'Готово: {0} программаторов, {1} конфигураций целей.'
+        logOrder    = 'Порядок: подключить программатор → «Определить чип» → «Подключиться» → «Считать дамп» → выбрать файл → «Прошить + проверить».'
+        logNames    = 'Имена конфигураций цели относятся к типу контроллера Flash, а не к марке чипа:'
+        logNames2   = '  stm32f1x — это GD32F3x0 (в том числе GD32F330), GD32F1x0, F10x, E10x и STM32F1;'
+        logNames3   = '  если марка неизвестна или сомневаетесь — просто нажмите «Определить чип».'
+        logNoOcd    = 'Без OpenOCD работа невозможна. Проверьте, что рядом с программой лежит папка tools с архивом.'
+        logNoFile   = 'Не выбран файл прошивки.'
+        logNoConn   = 'Нет подключения к цели.'
+        logSelected = 'Выбран файл: {0} ({1} байт)'
+        logOk       = 'РЕЗУЛЬТАТ: успешно'
+        logFail     = 'РЕЗУЛЬТАТ: ошибка'
+        logConnOk   = 'Подключено.'
+        logConnFail = 'Подключиться не удалось. Проверьте кабель, питание платы и выбранный конфиг цели.'
+        logDumpSave = 'Дамп сохранён: {0}'
+        logDetect   = '=== Автоопределение чипа ==='
+        logDetectGo = 'Перебираю конфигурации, это занимает до полуминуты.'
+        logDetectTry= '  проверяю: {0}'
+        logDetectHit= '  подходит: {0} — ядро {1}, Flash {2} КБ'
+        logDetectSet= 'Выбрана конфигурация цели: {0}. Теперь нажмите «Подключиться».'
+        logDetectCpu= 'Ядро определилось ({0}), но подходящий драйвер Flash не найден среди типовых. Выберите конфигурацию вручную.'
+        logDetectNo = 'Чип не отвечает. Проверьте питание платы, подключение SWDIO/SWCLK/GND и понизьте частоту до 480 кГц.'
+        logBackupNo = 'Операция отменена: не удалось снять дамп.'
+        ttlPrepare  = '=== Подготовка ==='
+        ttlHalt     = 'Остановка ядра'
+        ttlWrite    = 'Запись прошивки'
+        ttlVerify   = 'Проверка (verify)'
+        ttlRun      = 'Запуск'
+        ttlRead     = 'Чтение памяти'
+        ttlErase    = 'Стирание Flash'
+        ttlCheck    = 'Контроль первых слов'
+        ttlFlashInfo= 'Состояние Flash'
+        ttlUnlock   = 'Снятие защиты'
+        ttlBackup   = 'Резервный дамп -> {0}'
+        ttlConn     = '=== Подключение: {0} / {1} / {2} кГц ==='
+        msgErase    = 'Стереть Flash полностью? Данные будут потеряны.'
+        msgUnlock   = "Снятие защиты выполняет полное стирание кристалла (mass erase). Продолжить?`r`n`r`nПосле операции обязательно снять и подать питание платы: option bytes применяются только по power-on reset."
+        msgConfirm  = 'Подтверждение'
+        dlgFw       = 'Прошивка (*.bin;*.hex;*.elf)|*.bin;*.hex;*.elf|Все файлы (*.*)|*.*'
+        dlgDump     = 'Дамп (*.bin)|*.bin'
+        workdir     = 'Рабочая папка: {0}'
+    }
+    EN = @{
+        subtitle    = 'OpenOCD + ST-Link'
+        connected   = '● Connected'
+        disconnected= '● Not connected'
+        grpConn     = 'CONNECTION'
+        capIface    = 'Debug probe'
+        capTarget   = 'Target config'
+        capSpeed    = 'SWD speed, kHz'
+        capReset    = 'Reset'
+        resetSoft   = 'Software'
+        resetHard   = 'Hardware (SRST)'
+        btnDetect   = 'Detect chip'
+        btnConnect  = 'Connect'
+        btnDisconn  = 'Disconnect'
+        grpInfo     = 'TARGET INFORMATION'
+        capCore     = 'Core'
+        capId       = 'Device ID'
+        capFlash    = 'Flash size'
+        capVolt     = 'Voltage'
+        hint        = "Not sure what to pick in Target config? Press Detect chip.`r`n`r`nUnstable link: lower the speed to 480 kHz. Run the probe ground as a separate wire next to SWDIO/SWCLK."
+        capFile     = 'Firmware file'
+        btnBrowse   = 'Browse...'
+        capAddr     = 'Address'
+        capSize     = 'Read size'
+        chkBackup   = 'Back up flash before erase and program'
+        btnProgram  = 'Program + verify'
+        btnVerify   = 'Verify only'
+        btnRead     = 'Read dump'
+        btnErase    = 'Erase'
+        btnInfo     = 'Information'
+        btnUnlock   = 'Remove protection'
+        btnReset    = 'Reset and run'
+        btnClear    = 'Clear log'
+        capLang     = 'Language'
+        stReady     = 'Ready'
+        stBusy      = 'Working...'
+        stPrepare   = 'Preparing: unpacking OpenOCD (first run takes up to a minute)'
+        stDetect    = 'Detecting chip...'
+        stConnect   = 'Connecting...'
+        logPrepare  = 'Unpacking OpenOCD, the first run takes up to a minute...'
+        logReady    = 'Ready: {0} probes, {1} target configs.'
+        logOrder    = 'Order: attach the probe -> Detect chip -> Connect -> Read dump -> pick a file -> Program + verify.'
+        logNames    = 'Target config names refer to the flash controller type, not to the chip brand:'
+        logNames2   = '  stm32f1x covers GD32F3x0 (including GD32F330), GD32F1x0, F10x, E10x and STM32F1;'
+        logNames3   = '  if the marking is unknown or you are unsure, just press Detect chip.'
+        logNoOcd    = 'OpenOCD is required. Make sure the tools folder with the archive sits next to the program.'
+        logNoFile   = 'No firmware file selected.'
+        logNoConn   = 'Not connected to a target.'
+        logSelected = 'Selected file: {0} ({1} bytes)'
+        logOk       = 'RESULT: success'
+        logFail     = 'RESULT: failed'
+        logConnOk   = 'Connected.'
+        logConnFail = 'Connection failed. Check the cable, board power and the selected target config.'
+        logDumpSave = 'Dump saved: {0}'
+        logDetect   = '=== Chip autodetection ==='
+        logDetectGo = 'Trying configs, this takes up to half a minute.'
+        logDetectTry= '  trying: {0}'
+        logDetectHit= '  match: {0} - core {1}, flash {2} KB'
+        logDetectSet= 'Target config set to {0}. Now press Connect.'
+        logDetectCpu= 'Core detected ({0}), but no matching flash driver among the common ones. Pick a config manually.'
+        logDetectNo = 'No response from the chip. Check board power, SWDIO/SWCLK/GND wiring and lower the speed to 480 kHz.'
+        logBackupNo = 'Operation cancelled: the backup dump failed.'
+        ttlPrepare  = '=== Preparing ==='
+        ttlHalt     = 'Halting the core'
+        ttlWrite    = 'Programming'
+        ttlVerify   = 'Verify'
+        ttlRun      = 'Run'
+        ttlRead     = 'Reading memory'
+        ttlErase    = 'Erasing flash'
+        ttlCheck    = 'Checking the first words'
+        ttlFlashInfo= 'Flash state'
+        ttlUnlock   = 'Removing protection'
+        ttlBackup   = 'Backup dump -> {0}'
+        ttlConn     = '=== Connecting: {0} / {1} / {2} kHz ==='
+        msgErase    = 'Erase the whole flash? The data will be lost.'
+        msgUnlock   = "Removing protection performs a full chip erase (mass erase). Continue?`r`n`r`nAfter that, power-cycle the board: option bytes only apply on a power-on reset."
+        msgConfirm  = 'Confirm'
+        dlgFw       = 'Firmware (*.bin;*.hex;*.elf)|*.bin;*.hex;*.elf|All files (*.*)|*.*'
+        dlgDump     = 'Dump (*.bin)|*.bin'
+        workdir     = 'Working folder: {0}'
+    }
+}
+
+function T([string]$key) { return $Str[$script:Lang][$key] }
 
 # --- палитра в духе Cube ---
 $clrBack   = [System.Drawing.Color]::FromArgb(30, 42, 56)
 $clrPanel  = [System.Drawing.Color]::FromArgb(37, 53, 73)
 $clrHeader = [System.Drawing.Color]::FromArgb(15, 42, 71)
 $clrBtn    = [System.Drawing.Color]::FromArgb(46, 125, 178)
+$clrBtnAlt = [System.Drawing.Color]::FromArgb(70, 90, 110)
 $clrGreen  = [System.Drawing.Color]::FromArgb(96, 160, 60)
 $clrRed    = [System.Drawing.Color]::FromArgb(170, 60, 60)
 $clrText   = [System.Drawing.Color]::White
 $clrDim    = [System.Drawing.Color]::FromArgb(170, 190, 210)
+$clrLogBg  = [System.Drawing.Color]::FromArgb(226, 231, 237)   # приглушённый фон лога
+$clrAccent = [System.Drawing.Color]::FromArgb(120, 190, 240)
 
 function Get-OpenOcd {
     $exe = Get-ChildItem -Path $Base -Filter openocd.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -64,33 +238,33 @@ function Get-OpenOcd {
 function ConvertTo-TclPath([string]$p) { $p -replace '\\', '/' }
 
 function Log([string]$text, [System.Drawing.Color]$color) {
-    if (-not $text) { return }
+    if ($null -eq $text) { return }
     $log.SelectionStart = $log.TextLength
     $log.SelectionColor = $color
     $log.AppendText("$text`r`n")
     $log.ScrollToCaret()
 }
 
-function LogInfo([string]$t) { Log $t ([System.Drawing.Color]::Black) }
-function LogOk([string]$t)   { Log $t ([System.Drawing.Color]::FromArgb(0, 128, 0)) }
-function LogErr([string]$t)  { Log $t ([System.Drawing.Color]::FromArgb(200, 0, 0)) }
-function LogHead([string]$t) { Log $t ([System.Drawing.Color]::FromArgb(0, 60, 140)) }
+function LogInfo([string]$t) { Log $t ([System.Drawing.Color]::FromArgb(25, 30, 38)) }
+function LogOk([string]$t)   { Log $t ([System.Drawing.Color]::FromArgb(0, 110, 30)) }
+function LogErr([string]$t)  { Log $t ([System.Drawing.Color]::FromArgb(180, 0, 0)) }
+function LogHead([string]$t) { Log $t ([System.Drawing.Color]::FromArgb(10, 60, 140)) }
 
 function Line-Color([string]$line) {
-    if ($line -match '^Error:|Error:')     { return [System.Drawing.Color]::FromArgb(200, 0, 0) }
-    if ($line -match '^Warn')              { return [System.Drawing.Color]::FromArgb(200, 110, 0) }
-    if ($line -match '^Info')              { return [System.Drawing.Color]::FromArgb(70, 70, 70) }
-    return [System.Drawing.Color]::Black
+    if ($line -match 'Error:')  { return [System.Drawing.Color]::FromArgb(180, 0, 0) }
+    if ($line -match '^Warn')   { return [System.Drawing.Color]::FromArgb(170, 95, 0) }
+    if ($line -match '^Info')   { return [System.Drawing.Color]::FromArgb(85, 95, 105) }
+    return [System.Drawing.Color]::FromArgb(25, 30, 38)
 }
 
 # Разбирает вывод OpenOCD и заполняет панель информации о цели.
 function Parse-Target([string]$line) {
     if ($line -match 'Cortex-(M\d\+?)\s*(r\dp\d)?') { $lblCpu.Text  = "Cortex-$($Matches[1]) $($Matches[2])".Trim() }
     if ($line -match 'device id = (0x[0-9a-fA-F]+)') { $lblId.Text   = $Matches[1] }
-    if ($line -match 'Target voltage: ([\d\.]+)')    { $lblVolt.Text = '{0:N2} В' -f [double]$Matches[1] }
+    if ($line -match 'Target voltage: ([\d\.]+)')    { $lblVolt.Text = '{0:N2} V' -f [double]$Matches[1] }
     if ($line -match 'flash size = (\d+)\s*KiB') {
         $kb = [int]$Matches[1]
-        $lblFlash.Text = "$kb КБ"
+        $lblFlash.Text = "$kb KB"
         $txtSize.Text = '0x{0:X}' -f ($kb * 1024)
     }
 }
@@ -126,7 +300,7 @@ function Set-Busy([bool]$busy, [string]$status) {
 function Ocd-Connected { return ($script:tcp -and $script:tcp.Connected) }
 
 function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
-    if (-not (Ocd-Connected)) { LogErr 'Нет подключения к цели.'; return $null }
+    if (-not (Ocd-Connected)) { LogErr (T 'logNoConn'); return $null }
     $ns = $script:tcp.GetStream()
     $bytes = [Text.Encoding]::ASCII.GetBytes("$cmd`n")
     $ns.Write($bytes, 0, $bytes.Length); $ns.Flush()
@@ -145,7 +319,6 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
         }
     }
     $text = $sb.ToString() -replace '>\s*$', ''
-    # первая строка — эхо отправленной команды
     $lines = @($text -split "`r?`n" | Where-Object { $_ -ne '' -and $_ -ne $cmd })
     foreach ($l in $lines) { Log $l (Line-Color $l); Parse-Target $l }
     return ($lines -join "`n")
@@ -154,10 +327,10 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
 function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300) {
     LogHead "=== $title ==="
     Set-Busy $true $title
-    try { $out = Ocd-Send $cmd $timeoutSec } finally { Set-Busy $false 'Готов' }
+    try { $out = Ocd-Send $cmd $timeoutSec } finally { Set-Busy $false (T 'stReady') }
     if ($null -eq $out) { return $false }
     $ok = ($out -notmatch '(?im)^\s*error|failed|timed out')
-    if ($ok) { LogOk "РЕЗУЛЬТАТ: успешно`r`n" } else { LogErr "РЕЗУЛЬТАТ: ошибка`r`n" }
+    if ($ok) { LogOk ((T 'logOk') + "`r`n") } else { LogErr ((T 'logFail') + "`r`n") }
     return $ok
 }
 
@@ -198,32 +371,31 @@ function Invoke-OpenOcdOnce([string]$targetCfg, [string[]]$cmds, [int]$waitSec =
 # Подбирает конфигурацию цели перебором: пользователю не нужно знать, что GD32F330
 # шьётся драйвером с именем stm32f1x.
 function Find-Target {
-    LogHead '=== Автоопределение чипа ==='
-    LogInfo 'Перебираю конфигурации, это занимает до полуминуты.'
-    Set-Busy $true 'Определение чипа...'
+    LogHead (T 'logDetect')
+    LogInfo (T 'logDetectGo')
+    Set-Busy $true (T 'stDetect')
     $found = $null
     $cpuSeen = $null
     try {
         foreach ($t in @('stm32f1x', 'stm32f0x', 'stm32f3x', 'stm32f2x', 'stm32f4x', 'stm32g0x', 'stm32l4x', 'stm32h7x')) {
-            LogInfo "  проверяю: $t"
+            LogInfo ((T 'logDetectTry') -f $t)
             $txt = Invoke-OpenOcdOnce $t @('init; flash probe 0; shutdown')
             if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
             if ($txt -match 'flash size = (\d+)\s*KiB' -and $txt -notmatch 'probe failed') {
                 $found = $t
-                LogOk "  подходит: $t — ядро $cpuSeen, Flash $($Matches[1]) КБ"
+                LogOk ((T 'logDetectHit') -f $t, $cpuSeen, $Matches[1])
                 break
             }
         }
-    } finally { Set-Busy $false 'Готов' }
+    } finally { Set-Busy $false (T 'stReady') }
 
     if ($found) {
         $cmbTarget.Text = $found
-        LogOk "Выбрана конфигурация цели: $found. Теперь нажмите «Подключиться».`r`n"
+        LogOk (((T 'logDetectSet') -f $found) + "`r`n")
     } elseif ($cpuSeen) {
-        LogErr "Ядро определилось ($cpuSeen), но подходящий драйвер Flash не найден среди типовых."
-        LogErr "Выберите конфигурацию цели вручную по документации на чип.`r`n"
+        LogErr (((T 'logDetectCpu') -f $cpuSeen) + "`r`n")
     } else {
-        LogErr "Чип не отвечает. Проверьте питание платы, подключение SWDIO/SWCLK/GND и понизьте частоту до 480 кГц.`r`n"
+        LogErr ((T 'logDetectNo') + "`r`n")
     }
 }
 
@@ -242,8 +414,8 @@ function Ocd-Connect {
     )
     if ($cmbReset.SelectedIndex -eq 1) { $argList += @('-c', '"reset_config srst_only srst_nogate"') }
 
-    LogHead "=== Подключение: $($cmbIface.Text) / $($cmbTarget.Text) / $($cmbSpeed.Text) кГц ==="
-    Set-Busy $true 'Подключение...'
+    LogHead ((T 'ttlConn') -f $cmbIface.Text, $cmbTarget.Text, $cmbSpeed.Text)
+    Set-Busy $true (T 'stConnect')
     try {
         $script:proc = Start-Process -FilePath $ocd.Exe -ArgumentList $argList -NoNewWindow -PassThru `
             -RedirectStandardOutput $script:fOut -RedirectStandardError $script:fErr
@@ -252,7 +424,7 @@ function Ocd-Connect {
         $deadline = (Get-Date).AddSeconds(20)
         while ((Get-Date) -lt $deadline) {
             Pump-Log
-            if ($script:proc.HasExited) { LogErr 'OpenOCD завершился, соединение не установлено.'; break }
+            if ($script:proc.HasExited) { break }
             try {
                 $c = New-Object System.Net.Sockets.TcpClient
                 $c.Connect('127.0.0.1', 4444)
@@ -262,7 +434,7 @@ function Ocd-Connect {
             [System.Windows.Forms.Application]::DoEvents()
             Start-Sleep -Milliseconds 150
         }
-    } finally { Set-Busy $false 'Готов' }
+    } finally { Set-Busy $false (T 'stReady') }
 
     Pump-Log
     if (Ocd-Connected) {
@@ -272,10 +444,10 @@ function Ocd-Connect {
         Set-Connected $true
         Ocd-Send 'reset halt' 30 | Out-Null
         Ocd-Send 'flash info 0' 30 | Out-Null
-        LogOk "Подключено.`r`n"
+        LogOk ((T 'logConnOk') + "`r`n")
         return $true
     }
-    LogErr "Подключиться не удалось. Проверьте кабель, питание платы и выбранный конфиг цели.`r`n"
+    LogErr ((T 'logConnFail') + "`r`n")
     Ocd-Disconnect
     return $false
 }
@@ -289,9 +461,9 @@ function Ocd-Disconnect {
 }
 
 function Set-Connected([bool]$on) {
-    $lblConn.Text = if ($on) { '● Подключено' } else { '● Не подключено' }
+    $lblConn.Text = if ($on) { T 'connected' } else { T 'disconnected' }
     $lblConn.ForeColor = if ($on) { [System.Drawing.Color]::FromArgb(120, 220, 120) } else { [System.Drawing.Color]::FromArgb(220, 130, 130) }
-    $btnConnect.Text = if ($on) { 'Отключиться' } else { 'Подключиться' }
+    $btnConnect.Text = if ($on) { T 'btnDisconn' } else { T 'btnConnect' }
     $btnConnect.BackColor = if ($on) { $clrRed } else { $clrGreen }
     foreach ($b in $opButtons) { $b.Enabled = $on }
     $cmbIface.Enabled = -not $on; $cmbTarget.Enabled = -not $on
@@ -301,7 +473,7 @@ function Set-Connected([bool]$on) {
 }
 
 function Get-Fw {
-    if (-not (Test-Path $txtFile.Text)) { LogErr 'Не выбран файл прошивки.'; return $null }
+    if (-not (Test-Path $txtFile.Text)) { LogErr (T 'logNoFile'); return $null }
     # копия в латинский путь без пробелов — снимает проблемы с кириллицей и длинными именами
     $dst = Join-Path $Work 'fw.bin'
     Copy-Item $txtFile.Text $dst -Force
@@ -311,32 +483,34 @@ function Get-Fw {
 function Invoke-Backup {
     $name = 'backup_{0:yyyyMMdd_HHmmss}.bin' -f (Get-Date)
     $dst = Join-Path $Work $name
-    $ok = Ocd-Run "dump_image $(ConvertTo-TclPath $dst) $($txtAddr.Text) $($txtSize.Text)" "Резервный дамп -> $name"
-    if ($ok) { LogOk "Дамп сохранён: $dst" }
+    $ok = Ocd-Run "dump_image $(ConvertTo-TclPath $dst) $($txtAddr.Text) $($txtSize.Text)" ((T 'ttlBackup') -f $name)
+    if ($ok) { LogOk ((T 'logDumpSave') -f $dst) }
     return $ok
 }
 
 # --- интерфейс ---
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'GD32Flasher'
-$form.Size = New-Object System.Drawing.Size(1120, 750)
+$form.Text = "GD32Flasher $AppVersion"
+$form.Size = New-Object System.Drawing.Size(1180, 780)
+$form.MinimumSize = New-Object System.Drawing.Size(1060, 700)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $clrBack
 $form.ForeColor = $clrText
 $form.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-$form.MinimumSize = New-Object System.Drawing.Size(980, 640)
 
-function New-Btn($text, $w, $color) {
+function New-Btn($text, $color) {
     $b = New-Object System.Windows.Forms.Button
     $b.Text = $text
-    $b.Width = $w; $b.Height = 34
+    $b.AutoSize = $true
+    $b.AutoSizeMode = 'GrowAndShrink'
+    $b.MinimumSize = New-Object System.Drawing.Size(120, 34)
+    $b.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+    $b.Margin = New-Object System.Windows.Forms.Padding(0, 0, 8, 8)
     $b.FlatStyle = 'Flat'
     $b.FlatAppearance.BorderSize = 0
     $b.BackColor = $color
     $b.ForeColor = [System.Drawing.Color]::White
-    $b.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $b.Margin = New-Object System.Windows.Forms.Padding(0, 0, 8, 8)
     return $b
 }
 function New-Cap($text, $x, $y) {
@@ -353,36 +527,6 @@ function New-Val($text, $x, $y) {
     $l.ForeColor = $clrText
     return $l
 }
-
-# шапка
-$header = New-Object System.Windows.Forms.Panel
-$header.Dock = 'Top'; $header.Height = 52; $header.BackColor = $clrHeader
-$title = New-Object System.Windows.Forms.Label
-$title.Text = 'GD32Flasher'
-$title.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 15)
-$title.ForeColor = $clrText; $title.AutoSize = $true
-$title.Location = New-Object System.Drawing.Point(16, 12)
-$subtitle = New-Object System.Windows.Forms.Label
-$subtitle.Text = 'OpenOCD + ST-Link'
-$subtitle.ForeColor = $clrDim; $subtitle.AutoSize = $true
-$subtitle.Location = New-Object System.Drawing.Point(150, 19)
-$lblConn = New-Object System.Windows.Forms.Label
-$lblConn.Text = '● Не подключено'
-$lblConn.AutoSize = $true; $lblConn.Anchor = 'Top,Right'
-$lblConn.Location = New-Object System.Drawing.Point(940, 18)
-$header.Controls.AddRange(@($title, $subtitle, $lblConn))
-$form.Controls.Add($header)
-
-# правая панель — подключение и информация о цели
-$side = New-Object System.Windows.Forms.Panel
-$side.Dock = 'Right'; $side.Width = 300; $side.BackColor = $clrPanel; $side.Padding = New-Object System.Windows.Forms.Padding(12)
-
-$grpConn = New-Object System.Windows.Forms.Label
-$grpConn.Text = 'ПОДКЛЮЧЕНИЕ'; $grpConn.AutoSize = $true
-$grpConn.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-$grpConn.ForeColor = [System.Drawing.Color]::FromArgb(120, 190, 240)
-$grpConn.Location = New-Object System.Drawing.Point(14, 14)
-
 function New-Combo($x, $y, $w) {
     $c = New-Object System.Windows.Forms.ComboBox
     $c.Location = New-Object System.Drawing.Point($x, $y)
@@ -391,184 +535,231 @@ function New-Combo($x, $y, $w) {
     return $c
 }
 
+# шапка
+$header = New-Object System.Windows.Forms.Panel
+$header.Dock = 'Top'; $header.Height = 56; $header.BackColor = $clrHeader
+$title = New-Object System.Windows.Forms.Label
+$title.Text = "GD32Flasher $AppVersion"
+$title.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 15)
+$title.ForeColor = $clrText; $title.AutoSize = $true
+$title.Location = New-Object System.Drawing.Point(16, 14)
+$subtitle = New-Object System.Windows.Forms.Label
+$subtitle.ForeColor = $clrDim; $subtitle.AutoSize = $true
+$subtitle.Location = New-Object System.Drawing.Point(152, 21)
+
+$lblConn = New-Object System.Windows.Forms.Label
+$lblConn.AutoSize = $true; $lblConn.Anchor = 'Top,Right'
+$lblConn.Location = New-Object System.Drawing.Point(($form.ClientSize.Width - 190), 20)
+
+$capLang = New-Object System.Windows.Forms.Label
+$capLang.AutoSize = $true; $capLang.Anchor = 'Top,Right'
+$capLang.ForeColor = $clrDim
+$capLang.Location = New-Object System.Drawing.Point(($form.ClientSize.Width - 340), 21)
+
+$cmbLang = New-Combo ($form.ClientSize.Width - 285) 18 70
+$cmbLang.Anchor = 'Top,Right'
+$cmbLang.DropDownStyle = 'DropDownList'
+[void]$cmbLang.Items.AddRange(@('RU', 'EN'))
+$cmbLang.SelectedItem = 'RU'
+$cmbLang.Add_SelectedIndexChanged({ $script:Lang = $cmbLang.SelectedItem; Apply-Language })
+
+$header.Controls.AddRange(@($title, $subtitle, $capLang, $cmbLang, $lblConn))
+$form.Controls.Add($header)
+
+# правая панель — подключение и информация о цели
+$side = New-Object System.Windows.Forms.Panel
+$side.Dock = 'Right'; $side.Width = 306; $side.BackColor = $clrPanel
+
+$grpConn = New-Object System.Windows.Forms.Label
+$grpConn.AutoSize = $true
+$grpConn.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+$grpConn.ForeColor = $clrAccent
+$grpConn.Location = New-Object System.Drawing.Point(16, 16)
 $side.Controls.Add($grpConn)
-$side.Controls.Add((New-Cap 'Программатор' 14 44))
-$cmbIface = New-Combo 14 62 270
+
+$capIface = New-Cap '' 16 46; $side.Controls.Add($capIface)
+$cmbIface = New-Combo 16 64 274
 $cmbIface.DropDownStyle = 'DropDown'
 $cmbIface.AutoCompleteMode = 'SuggestAppend'
 $cmbIface.AutoCompleteSource = 'ListItems'
 $side.Controls.Add($cmbIface)
 
-$side.Controls.Add((New-Cap 'Конфигурация цели' 14 94))
-$cmbTarget = New-Combo 14 112 270
+$capTarget = New-Cap '' 16 96; $side.Controls.Add($capTarget)
+$cmbTarget = New-Combo 16 114 274
 $cmbTarget.DropDownStyle = 'DropDown'
 $cmbTarget.AutoCompleteMode = 'SuggestAppend'
 $cmbTarget.AutoCompleteSource = 'ListItems'
 $side.Controls.Add($cmbTarget)
 
-$side.Controls.Add((New-Cap 'Частота SWD, кГц' 14 144))
-$cmbSpeed = New-Combo 14 162 120
+$capSpeed = New-Cap '' 16 146; $side.Controls.Add($capSpeed)
+$cmbSpeed = New-Combo 16 164 120
 $cmbSpeed.DropDownStyle = 'DropDownList'
 @('100', '480', '950', '1800', '4000') | ForEach-Object { [void]$cmbSpeed.Items.Add($_) }
 $cmbSpeed.SelectedItem = '950'
 $side.Controls.Add($cmbSpeed)
 
-$side.Controls.Add((New-Cap 'Сброс' 150 144))
-$cmbReset = New-Combo 150 162 134
+$capReset = New-Cap '' 152 146; $side.Controls.Add($capReset)
+$cmbReset = New-Combo 152 164 138
 $cmbReset.DropDownStyle = 'DropDownList'
-[void]$cmbReset.Items.AddRange(@('Программный', 'Аппаратный (SRST)'))
-$cmbReset.SelectedIndex = 0
 $side.Controls.Add($cmbReset)
 
-$btnDetect = New-Btn 'Определить чип' 270 ([System.Drawing.Color]::FromArgb(70, 90, 110))
-$btnDetect.Location = New-Object System.Drawing.Point(14, 198)
+$btnDetect = New-Btn '' $clrBtnAlt
+$btnDetect.AutoSize = $false
+$btnDetect.Size = New-Object System.Drawing.Size(274, 34)
+$btnDetect.Location = New-Object System.Drawing.Point(16, 202)
 $btnDetect.Add_Click({ Find-Target })
 $side.Controls.Add($btnDetect)
 
-$btnConnect = New-Btn 'Подключиться' 270 $clrGreen
-$btnConnect.Location = New-Object System.Drawing.Point(14, 238)
+$btnConnect = New-Btn '' $clrGreen
+$btnConnect.AutoSize = $false
+$btnConnect.Size = New-Object System.Drawing.Size(274, 38)
+$btnConnect.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 10)
+$btnConnect.Location = New-Object System.Drawing.Point(16, 244)
 $btnConnect.Add_Click({ if (Ocd-Connected) { Ocd-Disconnect } else { Ocd-Connect | Out-Null } })
 $side.Controls.Add($btnConnect)
 
 $grpInfo = New-Object System.Windows.Forms.Label
-$grpInfo.Text = 'ИНФОРМАЦИЯ О ЦЕЛИ'; $grpInfo.AutoSize = $true
+$grpInfo.AutoSize = $true
 $grpInfo.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
-$grpInfo.ForeColor = [System.Drawing.Color]::FromArgb(120, 190, 240)
-$grpInfo.Location = New-Object System.Drawing.Point(14, 296)
+$grpInfo.ForeColor = $clrAccent
+$grpInfo.Location = New-Object System.Drawing.Point(16, 306)
 $side.Controls.Add($grpInfo)
 
-$side.Controls.Add((New-Cap 'Ядро' 14 326));        $lblCpu   = New-Val '--' 150 326; $side.Controls.Add($lblCpu)
-$side.Controls.Add((New-Cap 'Device ID' 14 352));   $lblId    = New-Val '--' 150 352; $side.Controls.Add($lblId)
-$side.Controls.Add((New-Cap 'Объём Flash' 14 378)); $lblFlash = New-Val '--' 150 378; $side.Controls.Add($lblFlash)
-$side.Controls.Add((New-Cap 'Напряжение' 14 404));  $lblVolt  = New-Val '--' 150 404; $side.Controls.Add($lblVolt)
+$capCore  = New-Cap '' 16 336; $side.Controls.Add($capCore);  $lblCpu   = New-Val '--' 160 336; $side.Controls.Add($lblCpu)
+$capId    = New-Cap '' 16 362; $side.Controls.Add($capId);    $lblId    = New-Val '--' 160 362; $side.Controls.Add($lblId)
+$capFlash = New-Cap '' 16 388; $side.Controls.Add($capFlash); $lblFlash = New-Val '--' 160 388; $side.Controls.Add($lblFlash)
+$capVolt  = New-Cap '' 16 414; $side.Controls.Add($capVolt);  $lblVolt  = New-Val '--' 160 414; $side.Controls.Add($lblVolt)
 
 $hint = New-Object System.Windows.Forms.Label
-$hint.Text = "Не знаете, что выбрать в «Конфигурация цели» — нажмите «Определить чип»." + [Environment]::NewLine + [Environment]::NewLine + "Связь нестабильна — снизьте частоту до 480 кГц. Землю программатора вести отдельным проводом рядом с SWDIO/SWCLK."
 $hint.ForeColor = $clrDim
-$hint.Location = New-Object System.Drawing.Point(14, 446)
-$hint.Size = New-Object System.Drawing.Size(270, 110)
+$hint.Location = New-Object System.Drawing.Point(16, 456)
+$hint.Size = New-Object System.Drawing.Size(274, 130)
 $side.Controls.Add($hint)
 $form.Controls.Add($side)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
-$main.Dock = 'Fill'; $main.Padding = New-Object System.Windows.Forms.Padding(14)
+$main.Dock = 'Fill'; $main.Padding = New-Object System.Windows.Forms.Padding(16, 12, 16, 8)
 $form.Controls.Add($main)
 
 $rowFile = New-Object System.Windows.Forms.Panel
-$rowFile.Dock = 'Top'; $rowFile.Height = 36
-$lblFile = New-Object System.Windows.Forms.Label
-$lblFile.Text = 'Файл прошивки'; $lblFile.ForeColor = $clrDim; $lblFile.AutoSize = $true
-$lblFile.Location = New-Object System.Drawing.Point(2, 8)
+$rowFile.Dock = 'Top'; $rowFile.Height = 34
+$capFile = New-Object System.Windows.Forms.Label
+$capFile.ForeColor = $clrDim; $capFile.AutoSize = $true
+$capFile.Location = New-Object System.Drawing.Point(2, 8)
 $txtFile = New-Object System.Windows.Forms.TextBox
-$txtFile.Location = New-Object System.Drawing.Point(110, 5)
-$txtFile.Size = New-Object System.Drawing.Size(560, 24)
+$txtFile.Location = New-Object System.Drawing.Point(130, 5)
+$txtFile.Size = New-Object System.Drawing.Size(520, 24)
 $txtFile.Anchor = 'Top,Left,Right'
-$btnBrowse = New-Btn 'Обзор...' 90 $clrBtn
-$btnBrowse.Height = 26
-$btnBrowse.Location = New-Object System.Drawing.Point(680, 4)
+$btnBrowse = New-Btn '' $clrBtn
+$btnBrowse.AutoSize = $false
+$btnBrowse.Size = New-Object System.Drawing.Size(110, 26)
+$btnBrowse.Location = New-Object System.Drawing.Point(660, 4)
 $btnBrowse.Anchor = 'Top,Right'
 $btnBrowse.Add_Click({
     $d = New-Object System.Windows.Forms.OpenFileDialog
-    $d.Filter = 'Прошивка (*.bin;*.hex;*.elf)|*.bin;*.hex;*.elf|Все файлы (*.*)|*.*'
+    $d.Filter = T 'dlgFw'
     if ($d.ShowDialog() -eq 'OK') {
         $txtFile.Text = $d.FileName
-        LogInfo "Выбран файл: $($d.FileName) ($((Get-Item $d.FileName).Length) байт)"
+        LogInfo ((T 'logSelected') -f $d.FileName, (Get-Item $d.FileName).Length)
     }
 })
-$rowFile.Controls.AddRange(@($lblFile, $txtFile, $btnBrowse))
+$rowFile.Controls.AddRange(@($capFile, $txtFile, $btnBrowse))
 
 $rowAddr = New-Object System.Windows.Forms.Panel
-$rowAddr.Dock = 'Top'; $rowAddr.Height = 36
-$lblAddr = New-Object System.Windows.Forms.Label
-$lblAddr.Text = 'Адрес'; $lblAddr.ForeColor = $clrDim; $lblAddr.AutoSize = $true
-$lblAddr.Location = New-Object System.Drawing.Point(2, 8)
+$rowAddr.Dock = 'Top'; $rowAddr.Height = 38
+$capAddr = New-Object System.Windows.Forms.Label
+$capAddr.ForeColor = $clrDim; $capAddr.AutoSize = $true
+$capAddr.Location = New-Object System.Drawing.Point(2, 10)
 $txtAddr = New-Object System.Windows.Forms.TextBox
-$txtAddr.Location = New-Object System.Drawing.Point(110, 5)
+$txtAddr.Location = New-Object System.Drawing.Point(130, 7)
 $txtAddr.Size = New-Object System.Drawing.Size(110, 24)
 $txtAddr.Text = '0x08000000'
-$lblSize = New-Object System.Windows.Forms.Label
-$lblSize.Text = 'Размер чтения'; $lblSize.ForeColor = $clrDim; $lblSize.AutoSize = $true
-$lblSize.Location = New-Object System.Drawing.Point(240, 8)
+$capSize = New-Object System.Windows.Forms.Label
+$capSize.ForeColor = $clrDim; $capSize.AutoSize = $true
+$capSize.Location = New-Object System.Drawing.Point(256, 10)
 $txtSize = New-Object System.Windows.Forms.TextBox
-$txtSize.Location = New-Object System.Drawing.Point(340, 5)
+$txtSize.Location = New-Object System.Drawing.Point(366, 7)
 $txtSize.Size = New-Object System.Drawing.Size(110, 24)
 $txtSize.Text = '0x20000'
 $chkBackup = New-Object System.Windows.Forms.CheckBox
-$chkBackup.Text = 'Резервный дамп перед стиранием и прошивкой'
-$chkBackup.Location = New-Object System.Drawing.Point(470, 6)
-$chkBackup.Size = New-Object System.Drawing.Size(340, 24)
+$chkBackup.Location = New-Object System.Drawing.Point(496, 8)
+$chkBackup.AutoSize = $true
 $chkBackup.ForeColor = $clrText
 $chkBackup.Checked = $true
-$rowAddr.Controls.AddRange(@($lblAddr, $txtAddr, $lblSize, $txtSize, $chkBackup))
+$rowAddr.Controls.AddRange(@($capAddr, $txtAddr, $capSize, $txtSize, $chkBackup))
 
+# кнопки: автоподбор высоты, иначе при переносе на второй ряд часть уезжает за край
 $rowBtns = New-Object System.Windows.Forms.FlowLayoutPanel
-$rowBtns.Dock = 'Top'; $rowBtns.Height = 88; $rowBtns.Padding = New-Object System.Windows.Forms.Padding(0, 6, 0, 6)
+$rowBtns.Dock = 'Top'
+$rowBtns.AutoSize = $true
+$rowBtns.AutoSizeMode = 'GrowAndShrink'
+$rowBtns.WrapContents = $true
+$rowBtns.Padding = New-Object System.Windows.Forms.Padding(0, 6, 0, 4)
 
-$btnProgram = New-Btn 'Прошить + проверить' 170 $clrBtn
+$btnProgram = New-Btn '' $clrBtn
 $btnProgram.Add_Click({
     $fw = Get-Fw; if (-not $fw) { return }
-    if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr 'Прошивка отменена: не удалось снять дамп.'; return }
+    if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
     $t = ConvertTo-TclPath $fw
-    if (Ocd-Run 'reset halt' 'Остановка ядра' 30) {
-        if (Ocd-Run "flash write_image erase $t $($txtAddr.Text)" 'Запись прошивки') {
-            if (Ocd-Run "verify_image $t $($txtAddr.Text)" 'Проверка (verify)') {
-                Ocd-Run 'reset run' 'Запуск' 30 | Out-Null
+    if (Ocd-Run 'reset halt' (T 'ttlHalt') 30) {
+        if (Ocd-Run "flash write_image erase $t $($txtAddr.Text)" (T 'ttlWrite')) {
+            if (Ocd-Run "verify_image $t $($txtAddr.Text)" (T 'ttlVerify')) {
+                Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null
             }
         }
     }
 })
 
-$btnVerify = New-Btn 'Только проверить' 150 $clrBtn
+$btnVerify = New-Btn '' $clrBtn
 $btnVerify.Add_Click({
     $fw = Get-Fw; if (-not $fw) { return }
-    Ocd-Run 'reset halt' 'Остановка ядра' 30 | Out-Null
-    Ocd-Run "verify_image $(ConvertTo-TclPath $fw) $($txtAddr.Text)" 'Проверка (verify)' | Out-Null
+    Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
+    Ocd-Run "verify_image $(ConvertTo-TclPath $fw) $($txtAddr.Text)" (T 'ttlVerify') | Out-Null
 })
 
-$btnRead = New-Btn 'Считать дамп' 140 $clrBtn
+$btnRead = New-Btn '' $clrBtn
 $btnRead.Add_Click({
     $d = New-Object System.Windows.Forms.SaveFileDialog
-    $d.Filter = 'Дамп (*.bin)|*.bin'; $d.FileName = 'dump.bin'
+    $d.Filter = T 'dlgDump'; $d.FileName = 'dump.bin'
     if ($d.ShowDialog() -ne 'OK') { return }
     $tmp = Join-Path $Work 'dump.bin'
-    Ocd-Run 'reset halt' 'Остановка ядра' 30 | Out-Null
-    if (Ocd-Run "dump_image $(ConvertTo-TclPath $tmp) $($txtAddr.Text) $($txtSize.Text)" 'Чтение памяти') {
+    Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
+    if (Ocd-Run "dump_image $(ConvertTo-TclPath $tmp) $($txtAddr.Text) $($txtSize.Text)" (T 'ttlRead')) {
         Copy-Item $tmp $d.FileName -Force
-        LogOk "Дамп сохранён: $($d.FileName)"
+        LogOk ((T 'logDumpSave') -f $d.FileName)
     }
 })
 
-$btnErase = New-Btn 'Стереть' 110 $clrBtn
+$btnErase = New-Btn '' $clrBtn
 $btnErase.Add_Click({
-    if ([System.Windows.Forms.MessageBox]::Show('Стереть Flash полностью? Данные будут потеряны.', 'Подтверждение', 'YesNo', 'Warning') -ne 'Yes') { return }
-    if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr 'Стирание отменено: не удалось снять дамп.'; return }
-    Ocd-Run 'reset halt' 'Остановка ядра' 30 | Out-Null
-    if (Ocd-Run 'flash erase_sector 0 0 last' 'Стирание Flash') {
-        Ocd-Run "mdw $($txtAddr.Text) 8" 'Контроль первых слов' 30 | Out-Null
+    if ([System.Windows.Forms.MessageBox]::Show((T 'msgErase'), (T 'msgConfirm'), 'YesNo', 'Warning') -ne 'Yes') { return }
+    if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
+    Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
+    if (Ocd-Run 'flash erase_sector 0 0 last' (T 'ttlErase')) {
+        Ocd-Run "mdw $($txtAddr.Text) 8" (T 'ttlCheck') 30 | Out-Null
     }
 })
 
-$btnInfo = New-Btn 'Информация' 120 $clrBtn
+$btnInfo = New-Btn '' $clrBtn
 $btnInfo.Add_Click({
-    Ocd-Run 'reset halt' 'Остановка ядра' 30 | Out-Null
-    Ocd-Run 'flash info 0' 'Состояние Flash' 30 | Out-Null
-    Ocd-Run "mdw $($txtAddr.Text) 8" 'Первые слова памяти' 30 | Out-Null
+    Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
+    Ocd-Run 'flash info 0' (T 'ttlFlashInfo') 30 | Out-Null
+    Ocd-Run "mdw $($txtAddr.Text) 8" (T 'ttlCheck') 30 | Out-Null
 })
 
-$btnUnlock = New-Btn 'Снять защиту' 130 $clrBtn
+$btnUnlock = New-Btn '' $clrBtn
 $btnUnlock.Add_Click({
-    $msg = 'Снятие защиты выполняет полное стирание кристалла (mass erase). Продолжить?' + [Environment]::NewLine + [Environment]::NewLine + 'После операции обязательно снять и подать питание платы: option bytes применяются только по power-on reset.'
-    if ([System.Windows.Forms.MessageBox]::Show($msg, 'Подтверждение', 'YesNo', 'Warning') -ne 'Yes') { return }
-    if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr 'Операция отменена: не удалось снять дамп.'; return }
-    Ocd-Run 'reset halt' 'Остановка ядра' 30 | Out-Null
-    Ocd-Run "$($cmbTarget.Text) unlock 0" 'Снятие защиты' | Out-Null
+    if ([System.Windows.Forms.MessageBox]::Show((T 'msgUnlock'), (T 'msgConfirm'), 'YesNo', 'Warning') -ne 'Yes') { return }
+    if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
+    Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
+    Ocd-Run "$($cmbTarget.Text) unlock 0" (T 'ttlUnlock') | Out-Null
 })
 
-$btnReset = New-Btn 'Сброс и запуск' 140 $clrBtn
-$btnReset.Add_Click({ Ocd-Run 'reset run' 'Сброс и запуск' 30 | Out-Null })
+$btnReset = New-Btn '' $clrBtn
+$btnReset.Add_Click({ Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null })
 
-$btnClear = New-Btn 'Очистить лог' 120 ([System.Drawing.Color]::FromArgb(70, 90, 110))
+$btnClear = New-Btn '' $clrBtnAlt
 $btnClear.Add_Click({ $log.Clear() })
 
 $opButtons = @($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnUnlock, $btnReset)
@@ -577,28 +768,67 @@ $rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnI
 $log = New-Object System.Windows.Forms.RichTextBox
 $log.Dock = 'Fill'
 $log.Font = New-Object System.Drawing.Font('Consolas', 9)
-$log.BackColor = [System.Drawing.Color]::White
-$log.ForeColor = [System.Drawing.Color]::Black
+$log.BackColor = $clrLogBg
+$log.ForeColor = [System.Drawing.Color]::FromArgb(25, 30, 38)
 $log.ReadOnly = $true
 $log.BorderStyle = 'None'
 
 $statusBar = New-Object System.Windows.Forms.Panel
-$statusBar.Dock = 'Bottom'; $statusBar.Height = 46; $statusBar.BackColor = $clrBack
+$statusBar.Dock = 'Bottom'; $statusBar.Height = 48; $statusBar.BackColor = $clrBack
 $progress = New-Object System.Windows.Forms.ProgressBar
-$progress.Location = New-Object System.Drawing.Point(2, 8)
-$progress.Size = New-Object System.Drawing.Size(500, 16)
+$progress.Location = New-Object System.Drawing.Point(2, 10)
+$progress.Size = New-Object System.Drawing.Size(500, 14)
 $progress.Anchor = 'Top,Left,Right'
 $lblStatus = New-Object System.Windows.Forms.Label
-$lblStatus.Text = 'Готов'
 $lblStatus.ForeColor = $clrDim; $lblStatus.AutoSize = $true
-$lblStatus.Location = New-Object System.Drawing.Point(2, 28)
+$lblStatus.Location = New-Object System.Drawing.Point(2, 30)
 $statusBar.Controls.AddRange(@($progress, $lblStatus))
 
+# порядок важен: докированные сверху панели ложатся в обратном порядке добавления
 $main.Controls.Add($log)
 $main.Controls.Add($rowBtns)
 $main.Controls.Add($rowAddr)
 $main.Controls.Add($rowFile)
 $main.Controls.Add($statusBar)
+
+function Apply-Language {
+    $subtitle.Text  = T 'subtitle'
+    $capLang.Text   = T 'capLang'
+    $grpConn.Text   = T 'grpConn'
+    $capIface.Text  = T 'capIface'
+    $capTarget.Text = T 'capTarget'
+    $capSpeed.Text  = T 'capSpeed'
+    $capReset.Text  = T 'capReset'
+    $grpInfo.Text   = T 'grpInfo'
+    $capCore.Text   = T 'capCore'
+    $capId.Text     = T 'capId'
+    $capFlash.Text  = T 'capFlash'
+    $capVolt.Text   = T 'capVolt'
+    $hint.Text      = T 'hint'
+    $capFile.Text   = T 'capFile'
+    $btnBrowse.Text = T 'btnBrowse'
+    $capAddr.Text   = T 'capAddr'
+    $capSize.Text   = T 'capSize'
+    $chkBackup.Text = T 'chkBackup'
+    $btnProgram.Text= T 'btnProgram'
+    $btnVerify.Text = T 'btnVerify'
+    $btnRead.Text   = T 'btnRead'
+    $btnErase.Text  = T 'btnErase'
+    $btnInfo.Text   = T 'btnInfo'
+    $btnUnlock.Text = T 'btnUnlock'
+    $btnReset.Text  = T 'btnReset'
+    $btnClear.Text  = T 'btnClear'
+    $btnDetect.Text = T 'btnDetect'
+
+    $idx = if ($cmbReset.SelectedIndex -ge 0) { $cmbReset.SelectedIndex } else { 0 }
+    $cmbReset.Items.Clear()
+    [void]$cmbReset.Items.AddRange(@((T 'resetSoft'), (T 'resetHard')))
+    $cmbReset.SelectedIndex = $idx
+
+    $lblConn.Text = if (Ocd-Connected) { T 'connected' } else { T 'disconnected' }
+    $btnConnect.Text = if (Ocd-Connected) { T 'btnDisconn' } else { T 'btnConnect' }
+    if ($lblStatus.Text -eq '' -or -not (Ocd-Connected)) { $lblStatus.Text = T 'stReady' }
+}
 
 # Подготовка идёт ПОСЛЕ показа окна: на новой машине распаковка OpenOCD занимает
 # до минуты, и раньше всё это время на экране не было ничего — казалось, что программа
@@ -607,9 +837,9 @@ $form.Add_Shown({
     $form.Activate()
     foreach ($b in $opButtons) { $b.Enabled = $false }
     $btnDetect.Enabled = $false; $btnConnect.Enabled = $false
-    Set-Busy $true 'Подготовка: распаковка OpenOCD (при первом запуске — до минуты)'
-    LogHead '=== Подготовка ==='
-    LogInfo 'Распаковываю OpenOCD, при первом запуске это занимает до минуты...'
+    Set-Busy $true (T 'stPrepare')
+    LogHead (T 'ttlPrepare')
+    LogInfo (T 'logPrepare')
     [System.Windows.Forms.Application]::DoEvents()
     try {
         $ocd = Get-OpenOcd
@@ -619,20 +849,20 @@ $form.Add_Shown({
             ForEach-Object { [void]$cmbTarget.Items.Add($_.BaseName) }
         $cmbIface.Text = if ($cmbIface.Items.Contains('stlink')) { 'stlink' } else { $cmbIface.Items[0] }
         $cmbTarget.Text = 'stm32f1x'
-        LogOk "Готово: $($cmbIface.Items.Count) программаторов, $($cmbTarget.Items.Count) конфигураций целей."
+        LogOk ((T 'logReady') -f $cmbIface.Items.Count, $cmbTarget.Items.Count)
         LogInfo ''
-        LogInfo 'Порядок: подключить программатор → «Определить чип» → «Подключиться» → «Считать дамп» → выбрать файл → «Прошить + проверить».'
-        LogInfo 'Имена конфигураций цели относятся к типу контроллера Flash, а не к марке чипа:'
-        LogInfo '  stm32f1x — это GD32F3x0 (в том числе GD32F330), GD32F1x0, F10x, E10x и STM32F1;'
-        LogInfo '  если марка неизвестна или сомневаетесь — просто нажмите «Определить чип».'
+        LogInfo (T 'logOrder')
+        LogInfo (T 'logNames')
+        LogInfo (T 'logNames2')
+        LogInfo (T 'logNames3')
         LogInfo ''
         $btnConnect.Enabled = $true
         $btnDetect.Enabled = $true
     } catch {
         LogErr $_.Exception.Message
-        LogErr 'Без OpenOCD работа невозможна. Проверьте, что рядом с программой лежит папка tools с архивом.'
+        LogErr (T 'logNoOcd')
     } finally {
-        Set-Busy $false 'Готов'
+        Set-Busy $false (T 'stReady')
     }
 })
 
@@ -643,9 +873,11 @@ $timer.Start()
 
 $form.Add_FormClosing({ $timer.Stop(); Ocd-Disconnect })
 
+Apply-Language
 Set-Connected $false
-LogHead 'GD32Flasher'
-LogInfo "Рабочая папка: $Work"
+LogHead "GD32Flasher $AppVersion"
+LogInfo "$($MyInvocation.MyCommand.Path)"
+LogInfo ((T 'workdir') -f $Work)
 
 [void]$form.ShowDialog()
 $script:mutex.ReleaseMutex()
