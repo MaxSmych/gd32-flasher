@@ -328,6 +328,12 @@ function Set-Busy([bool]$busy, [string]$status) {
 
 function Ocd-Connected { return ($script:tcp -and $script:tcp.Connected) }
 
+function Require-Connection {
+    if (Ocd-Connected) { return $true }
+    LogErr (T 'logNoConn')
+    return $false
+}
+
 function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
     if (-not (Ocd-Connected)) { LogErr (T 'logNoConn'); return $null }
     $ns = $script:tcp.GetStream()
@@ -494,7 +500,7 @@ function Set-Connected([bool]$on) {
     $lblConn.ForeColor = if ($on) { [System.Drawing.Color]::FromArgb(120, 220, 120) } else { [System.Drawing.Color]::FromArgb(220, 130, 130) }
     $btnConnect.Text = if ($on) { T 'btnDisconn' } else { T 'btnConnect' }
     $btnConnect.BackColor = if ($on) { $clrRed } else { $clrGreen }
-    foreach ($b in $opButtons) { $b.Enabled = $on }
+        foreach ($b in $opButtons) { $b.Enabled = $true }
     $cmbIface.Enabled = -not $on; $cmbTarget.Enabled = -not $on
     $cmbSpeed.Enabled = -not $on; $cmbReset.Enabled = -not $on
     $btnDetect.Enabled = -not $on
@@ -521,8 +527,8 @@ function Invoke-Backup {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "GD32Flasher $AppVersion"
-$form.Size = New-Object System.Drawing.Size(1200, 780)
-$form.MinimumSize = New-Object System.Drawing.Size(1080, 700)
+$form.Size = New-Object System.Drawing.Size(1040, 720)
+$form.MinimumSize = New-Object System.Drawing.Size(900, 640)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $clrBack
 $form.ForeColor = $clrText
@@ -819,6 +825,7 @@ $rowBtns.BorderStyle = 'FixedSingle'
 
 $btnProgram = New-Btn '' $clrBtn
 $btnProgram.Add_Click({
+    if (-not (Require-Connection)) { return }
     $fw = Get-Fw; if (-not $fw) { return }
     if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
     $t = ConvertTo-TclPath $fw
@@ -833,6 +840,7 @@ $btnProgram.Add_Click({
 
 $btnVerify = New-Btn '' $clrBtn
 $btnVerify.Add_Click({
+    if (-not (Require-Connection)) { return }
     $fw = Get-Fw; if (-not $fw) { return }
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
     Ocd-Run "verify_image $(ConvertTo-TclPath $fw) $($txtAddr.Text)" (T 'ttlVerify') | Out-Null
@@ -840,6 +848,7 @@ $btnVerify.Add_Click({
 
 $btnRead = New-Btn '' $clrBtn
 $btnRead.Add_Click({
+    if (-not (Require-Connection)) { return }
     $d = New-Object System.Windows.Forms.SaveFileDialog
     $d.Filter = T 'dlgDump'; $d.FileName = 'dump.bin'
     if ($d.ShowDialog() -ne 'OK') { return }
@@ -853,6 +862,7 @@ $btnRead.Add_Click({
 
 $btnErase = New-Btn '' $clrBtn
 $btnErase.Add_Click({
+    if (-not (Require-Connection)) { return }
     if ([System.Windows.Forms.MessageBox]::Show((T 'msgErase'), (T 'msgConfirm'), 'YesNo', 'Warning') -ne 'Yes') { return }
     if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
@@ -863,6 +873,7 @@ $btnErase.Add_Click({
 
 $btnInfo = New-Btn '' $clrBtn
 $btnInfo.Add_Click({
+    if (-not (Require-Connection)) { return }
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
     Ocd-Run 'flash info 0' (T 'ttlFlashInfo') 30 | Out-Null
     Ocd-Run "mdw $($txtAddr.Text) 8" (T 'ttlCheck') 30 | Out-Null
@@ -870,6 +881,7 @@ $btnInfo.Add_Click({
 
 $btnUnlock = New-Btn '' $clrBtn
 $btnUnlock.Add_Click({
+    if (-not (Require-Connection)) { return }
     if ([System.Windows.Forms.MessageBox]::Show((T 'msgUnlock'), (T 'msgConfirm'), 'YesNo', 'Warning') -ne 'Yes') { return }
     if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
@@ -877,13 +889,14 @@ $btnUnlock.Add_Click({
 })
 
 $btnReset = New-Btn '' $clrBtn
-$btnReset.Add_Click({ Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null })
+$btnReset.Add_Click({ if (Require-Connection) { Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null } })
 
 # OpenOCD берёт объём Flash из регистра размера, а клоны его часто не заполняют
 # («STM32 flash size failed, probe inaccurate»). Определяем сами: сначала регистр
 # по адресам разных семейств, затем — чтением границ.
 $btnFlashSz = New-Btn '' $clrBtn
 $btnFlashSz.Add_Click({
+    if (-not (Require-Connection)) { return }
     LogHead ('=== ' + (T 'ttlFlashSz') + ' ===')
     Set-Busy $true (T 'ttlFlashSz')
     $kb = 0
@@ -965,23 +978,20 @@ function Set-ToolButton($button, [string]$kind, [string]$caption, [System.Drawin
         $button.FlatStyle = 'Flat'
         $button.BackColor = $clrTool
         $button.FlatAppearance.BorderSize = 0
+            $bitmap = New-Object System.Drawing.Bitmap(42, 42)
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $iconBounds = New-Object System.Drawing.Rectangle(0, 0, 42, 42)
+            Draw-ToolIcon $graphics $kind $iconBounds $iconColor
+            $graphics.Dispose()
+                $button.BackgroundImage = $bitmap
+                $button.BackgroundImageLayout = 'Center'
+            $button.Tag = $true
+            $button.Add_MouseEnter({ $_.Sender.BackColor = $clrToolHot })
+            $button.Add_MouseLeave({ $_.Sender.BackColor = $clrTool })
     }
     $button.Text = ''
-    $button.Tag = [pscustomobject]@{ Kind = $kind; IconColor = $iconColor }
     $button.AccessibleName = $caption
     $tip.SetToolTip($button, $caption)
-    if ($newButton) {
-        $button.Add_Paint({
-            $data = $_.Sender.Tag
-            $back = if ($_.Sender.Enabled) { $_.Sender.BackColor } else { [System.Drawing.Color]::FromArgb(70, 91, 107) }
-            $_.Graphics.FillRectangle((New-Object System.Drawing.SolidBrush($back)), $_.ClipRectangle)
-            $iconColor = if ($_.Sender.Enabled) { $data.IconColor } else { [System.Drawing.Color]::FromArgb(125, 148, 164) }
-            Draw-ToolIcon $_.Graphics $data.Kind $_.ClipRectangle $iconColor
-        })
-        $button.Add_MouseEnter({ $_.Sender.BackColor = $clrToolHot; $_.Sender.Invalidate() })
-        $button.Add_MouseLeave({ $_.Sender.BackColor = $clrTool; $_.Sender.Invalidate() })
-    }
-    $button.Invalidate()
 }
 
 Set-ToolButton $btnProgram  'program' (T 'btnProgram') $clrIcon
@@ -993,7 +1003,34 @@ Set-ToolButton $btnFlashSz  'flash' (T 'btnFlashSz') $clrIcon
 Set-ToolButton $btnUnlock   'unlock' (T 'btnUnlock') $clrIcon
 Set-ToolButton $btnReset    'reset' (T 'btnReset') $clrIcon
 Set-ToolButton $btnClear    'clear' (T 'btnClear') $clrIcon
-$rowBtns.Controls.AddRange(@($btnProgram, $btnVerify, $btnRead, $btnErase, $btnInfo, $btnFlashSz, $btnUnlock, $btnReset, $btnClear))
+
+function New-ToolItem($button) {
+    $item = New-Object System.Windows.Forms.PictureBox
+    $item.Size = New-Object System.Drawing.Size(42, 42)
+    $item.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 6)
+    $item.BackColor = $clrTool
+    $item.Image = $button.BackgroundImage
+    $item.SizeMode = 'CenterImage'
+    $item.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $item.Tag = $button
+    $item.AccessibleName = $button.AccessibleName
+    $tip.SetToolTip($item, $button.AccessibleName)
+    $item.Add_Click({ $_.Sender.Tag.PerformClick() })
+    $item.Add_MouseEnter({ $_.Sender.BackColor = $clrToolHot })
+    $item.Add_MouseLeave({ $_.Sender.BackColor = $clrTool })
+    return $item
+}
+
+$icoProgram = New-ToolItem $btnProgram
+$icoVerify = New-ToolItem $btnVerify
+$icoRead = New-ToolItem $btnRead
+$icoErase = New-ToolItem $btnErase
+$icoInfo = New-ToolItem $btnInfo
+$icoFlashSz = New-ToolItem $btnFlashSz
+$icoUnlock = New-ToolItem $btnUnlock
+$icoReset = New-ToolItem $btnReset
+$icoClear = New-ToolItem $btnClear
+$rowBtns.Controls.AddRange(@($icoProgram, $icoVerify, $icoRead, $icoErase, $icoInfo, $icoFlashSz, $icoUnlock, $icoReset, $icoClear))
 
 $log = New-Object System.Windows.Forms.RichTextBox
 $log.Dock = 'Fill'
@@ -1024,15 +1061,13 @@ $main.Controls.Add($rowFile)
 $main.Controls.Add($statusBar)
 $main.Controls.Add($rowBtns)
 
-# Минимальная ширина нужна только для полей формы: команды живут в фиксированной панели слева.
+# Не расширяем окно ради разметки: на небольшом экране оно должно оставаться целиком видимым.
 function Fit-Window {
-    $need = 900 + $main.Padding.Left + $main.Padding.Right + $side.Width + $rowBtns.Width + 26
     $area = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
-    $w = [Math]::Min($need, $area.Width - 40)
-    if ($w -gt $form.Width) {
-        $form.Width = $w
-        $form.Left = $area.X + [int](($area.Width - $form.Width) / 2)
-    }
+    $form.Width = [Math]::Min($form.Width, $area.Width - 24)
+    $form.Height = [Math]::Min($form.Height, $area.Height - 24)
+    $form.Left = $area.X + [int](($area.Width - $form.Width) / 2)
+    $form.Top = $area.Y + [int](($area.Height - $form.Height) / 2)
 }
 
 function Apply-Language {
@@ -1077,6 +1112,15 @@ function Apply-Language {
         Set-ToolButton $btnUnlock   'unlock' (T 'btnUnlock') $clrIcon
         Set-ToolButton $btnReset    'reset' (T 'btnReset') $clrIcon
         Set-ToolButton $btnClear    'clear' (T 'btnClear') $clrIcon
+            $icoProgram.AccessibleName = T 'btnProgram'; $tip.SetToolTip($icoProgram, $icoProgram.AccessibleName)
+            $icoVerify.AccessibleName = T 'btnVerify'; $tip.SetToolTip($icoVerify, $icoVerify.AccessibleName)
+            $icoRead.AccessibleName = T 'btnRead'; $tip.SetToolTip($icoRead, $icoRead.AccessibleName)
+            $icoErase.AccessibleName = T 'btnErase'; $tip.SetToolTip($icoErase, $icoErase.AccessibleName)
+            $icoInfo.AccessibleName = T 'btnInfo'; $tip.SetToolTip($icoInfo, $icoInfo.AccessibleName)
+            $icoFlashSz.AccessibleName = T 'btnFlashSz'; $tip.SetToolTip($icoFlashSz, $icoFlashSz.AccessibleName)
+            $icoUnlock.AccessibleName = T 'btnUnlock'; $tip.SetToolTip($icoUnlock, $icoUnlock.AccessibleName)
+            $icoReset.AccessibleName = T 'btnReset'; $tip.SetToolTip($icoReset, $icoReset.AccessibleName)
+            $icoClear.AccessibleName = T 'btnClear'; $tip.SetToolTip($icoClear, $icoClear.AccessibleName)
     if ($form.Visible) { Fit-Window }
 }
 
@@ -1085,7 +1129,7 @@ function Apply-Language {
 # не запустилась.
 $form.Add_Shown({
     $form.Activate()
-    foreach ($b in $opButtons) { $b.Enabled = $false }
+    foreach ($b in $opButtons) { $b.Enabled = $true }
     $btnDetect.Enabled = $false; $btnConnect.Enabled = $false
     Set-Busy $true (T 'stPrepare')
     LogHead (T 'ttlPrepare')
