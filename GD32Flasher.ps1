@@ -62,49 +62,89 @@ $Str = @{
         btnDetect   = 'Определить чип'
         btnPinout   = 'Как подключить провода'
         ttlPinout   = 'Подключение программатора к плате'
-        pinoutText  = @"
-ЧТО СОЕДИНЯТЬ — четыре провода
+        tabWires    = '  Провода  '
+        tabPkg      = '  Корпуса  '
+        tabHdr      = '  Разъём  '
+        tabHelp     = '  Если связи нет  '
+        pinoutWires = @"
 
-    Программатор              Плата
-    SWDIO   ───────────────   SWDIO    у GD32 и STM32 это вывод PA13
-    SWCLK   ───────────────   SWCLK    PA14
-    GND     ───────────────   GND
-    3.3V    ───────────────   3.3V     только если плата не питается сама
+   ЧТО СОЕДИНЯТЬ — четыре провода
 
-  Землю вести ОТДЕЛЬНЫМ проводом рядом с SWDIO и SWCLK. Общая земля через
-  корпус или дальний контакт даёт срывы связи на скорости.
-
-  NRST нужен редко, и у многих клонов ST-Link V2 он просто не выведен.
-
-
-РАЗЪЁМ НА ПЛАТЕ — стандарт ARM Cortex Debug, 10 контактов, шаг 1.27 мм
-
-      1  VTref      ●  ●    2  SWDIO
-      3  GND        ●  ●    4  SWCLK
-      5  GND        ●  ●    6  SWO
-      7  KEY        ●  ●    8  NC
-      9  GNDDetect  ●  ●   10  nRESET
-
-  Первый контакт помечен точкой или квадратной площадкой, ключ разъёма —
-  со стороны выреза. Шелкография врёт чаще, чем хотелось бы: если связи
-  нет, прозвонить контакты до GND и питания.
+      Программатор              Плата
+      SWDIO   ──────────────    SWDIO     вывод PA13
+      SWCLK   ──────────────    SWCLK     вывод PA14
+      GND     ──────────────    GND
+      3.3V    ──────────────    3.3V      только если плата не питается сама
 
 
-ST-LINK V2, клон-донгл
+   Землю вести ОТДЕЛЬНЫМ проводом рядом с SWDIO и SWCLK. Общая земля через
+   корпус или дальний контакт даёт срывы связи на скорости.
 
-  Контакты подписаны прямо на корпусе, нужны только четыре: 3.3V, SWDIO,
-  SWCLK, GND. SWIM рядом — это не SWD, а интерфейс STM8, с SWDIO не путать.
-  5 В на цель не подавать.
+   NRST нужен редко, и у многих клонов ST-Link V2 он просто не выведен.
 
 
-ЕСЛИ СВЯЗИ НЕТ
+   ST-LINK V2, КЛОН-ДОНГЛ
 
-  • понизить частоту SWD до 480 кГц;
-  • провода короче 10-15 см, земля рядом с сигнальными;
-  • питать плату отдельно, а не от программатора: заметная нагрузка сажает
-    донгл, и он перестаёт опознаваться даже на USB;
-  • если прошивка заняла PA13/PA14 под обычные GPIO, SWD пропадает сразу
-    после старта — остаётся UART-загрузчик через BOOT0.
+   Контакты подписаны прямо на корпусе, нужны только четыре: 3.3V, SWDIO,
+   SWCLK, GND. SWIM рядом — это не SWD, а интерфейс STM8, с SWDIO не путать.
+   5 В на цель не подавать.
+"@
+        pinoutPkg   = @"
+
+   НОМЕРА ВЫВОДОВ ПО КОРПУСАМ — GD32F330, из даташита GigaDevice
+
+   ┌───────────────────┬────────┬────────┬───────┬───────┬─────────┐
+   │ Вывод             │ LQFP64 │ LQFP48 │ QFN32 │ QFN28 │ TSSOP20 │
+   ├───────────────────┼────────┼────────┼───────┼───────┼─────────┤
+   │ PA13   SWDIO      │   46   │   34   │  23   │  21   │   19    │
+   │ PA14   SWCLK      │   49   │   37   │  24   │  22   │   20    │
+   │ NRST   сброс      │    7   │    7   │   4   │   4   │    4    │
+   │ BOOT0  загрузчик  │   60   │   44   │  31   │   1   │    1    │
+   └───────────────────┴────────┴────────┴───────┴───────┴─────────┘
+
+   Счёт выводов у LQFP и QFN — против часовой стрелки от ключевой точки
+   (кружок или скошенный угол), у TSSOP — от метки рядом с первым выводом.
+
+   У всех STM32 и GD32 серий F0, F1, F3 отладочные выводы одни и те же:
+   SWDIO = PA13, SWCLK = PA14. Меняются только номера на корпусе — их и
+   смотреть в даташите на свой чип.
+"@
+        pinoutHdr   = @"
+
+   РАЗЪЁМ НА ПЛАТЕ — ARM Cortex Debug, 10 контактов, шаг 1.27 мм
+
+                     ┌─────────┐
+       1  VTref      │ ●     ● │   2  SWDIO
+       3  GND        │ ●     ● │   4  SWCLK
+       5  GND        │ ●     ● │   6  SWO
+       7  KEY        │       ● │   8  NC
+       9  GNDDetect  │ ●     ● │  10  nRESET
+                     └─────────┘
+
+   Контакт 7 — ключ: в вилке он отсутствует, в ответной части закрыт
+   заглушкой. По нему и определяется, какой стороной вставлять.
+
+   Первый контакт помечен точкой или квадратной площадкой. Шелкография
+   врёт чаще, чем хотелось бы: если связи нет — прозвонить контакты до
+   GND и до питания, а не верить надписям.
+"@
+        pinoutHelp  = @"
+
+   ЕСЛИ СВЯЗИ НЕТ
+
+   •  понизить частоту SWD до 480 кГц;
+
+   •  провода короче 10-15 см, земля рядом с сигнальными;
+
+   •  питать плату отдельно, а не от программатора: заметная нагрузка
+      сажает донгл, и он перестаёт опознаваться даже на USB;
+
+   •  если прошивка заняла PA13/PA14 под обычные GPIO, SWD пропадает
+      сразу после старта — остаётся UART-загрузчик через BOOT0;
+
+   •  «Error: open failed» — это не про провода, а про драйвер:
+      поставить tools\stlink-driver\stlink_winusb_install.bat
+      от имени администратора, до подключения программатора.
 "@
         btnConnect  = 'Подключиться'
         btnDisconn  = 'Отключиться'
@@ -202,49 +242,89 @@ ST-LINK V2, клон-донгл
         btnDetect   = 'Detect chip'
         btnPinout   = 'How to wire it up'
         ttlPinout   = 'Wiring the probe to the board'
-        pinoutText  = @"
-WHAT TO CONNECT - four wires
+        tabWires    = '  Wires  '
+        tabPkg      = '  Packages  '
+        tabHdr      = '  Connector  '
+        tabHelp     = '  No link  '
+        pinoutWires = @"
 
-    Probe                     Board
-    SWDIO   ───────────────   SWDIO    on GD32 and STM32 this is pin PA13
-    SWCLK   ───────────────   SWCLK    PA14
-    GND     ───────────────   GND
-    3.3V    ───────────────   3.3V     only if the board has no power of its own
+   WHAT TO CONNECT - four wires
 
-  Run the ground as a SEPARATE wire next to SWDIO and SWCLK. A shared ground
-  through the case or a distant pin causes dropouts at speed.
-
-  NRST is rarely needed, and many ST-Link V2 clones do not expose it at all.
-
-
-BOARD CONNECTOR - ARM Cortex Debug standard, 10 pins, 1.27 mm pitch
-
-      1  VTref      ●  ●    2  SWDIO
-      3  GND        ●  ●    4  SWCLK
-      5  GND        ●  ●    6  SWO
-      7  KEY        ●  ●    8  NC
-      9  GNDDetect  ●  ●   10  nRESET
-
-  Pin 1 is marked with a dot or a square pad, and the key sits on the notched
-  side. Silkscreen lies more often than you would like: if there is no link,
-  ring the pins out against GND and power.
+      Probe                     Board
+      SWDIO   ──────────────    SWDIO     pin PA13
+      SWCLK   ──────────────    SWCLK     pin PA14
+      GND     ──────────────    GND
+      3.3V    ──────────────    3.3V      only if the board has no power itself
 
 
-ST-LINK V2 DONGLE CLONE
+   Run the ground as a SEPARATE wire next to SWDIO and SWCLK. A shared ground
+   through the case or a distant pin causes dropouts at speed.
 
-  The pins are labelled on the case itself; only four are needed: 3.3V, SWDIO,
-  SWCLK, GND. SWIM next to them is not SWD - it is the STM8 interface, do not
-  confuse it with SWDIO. Never feed 5 V to the target.
+   NRST is rarely needed, and many ST-Link V2 clones do not expose it at all.
 
 
-IF THERE IS NO LINK
+   ST-LINK V2 DONGLE CLONE
 
-  - lower the SWD speed to 480 kHz;
-  - keep wires under 10-15 cm, ground next to the signals;
-  - power the board separately: a noticeable load drags the dongle down and it
-    stops enumerating on USB at all;
-  - if the firmware took PA13/PA14 as ordinary GPIO, SWD disappears right after
-    startup - the UART bootloader via BOOT0 is what is left.
+   The pins are labelled on the case itself; only four are needed: 3.3V,
+   SWDIO, SWCLK, GND. SWIM next to them is not SWD - it is the STM8 interface,
+   do not confuse it with SWDIO. Never feed 5 V to the target.
+"@
+        pinoutPkg   = @"
+
+   PIN NUMBERS BY PACKAGE - GD32F330, from the GigaDevice datasheet
+
+   ┌───────────────────┬────────┬────────┬───────┬───────┬─────────┐
+   │ Pin               │ LQFP64 │ LQFP48 │ QFN32 │ QFN28 │ TSSOP20 │
+   ├───────────────────┼────────┼────────┼───────┼───────┼─────────┤
+   │ PA13   SWDIO      │   46   │   34   │  23   │  21   │   19    │
+   │ PA14   SWCLK      │   49   │   37   │  24   │  22   │   20    │
+   │ NRST   reset      │    7   │    7   │   4   │   4   │    4    │
+   │ BOOT0  bootloader │   60   │   44   │  31   │   1   │    1    │
+   └───────────────────┴────────┴────────┴───────┴───────┴─────────┘
+
+   LQFP and QFN pins count counter-clockwise from the key mark (a dot or a
+   bevelled corner); TSSOP counts from the mark next to pin 1.
+
+   Every STM32 and GD32 in the F0, F1 and F3 families uses the same debug
+   pins: SWDIO = PA13, SWCLK = PA14. Only the package numbers differ - look
+   those up in the datasheet for your own chip.
+"@
+        pinoutHdr   = @"
+
+   BOARD CONNECTOR - ARM Cortex Debug, 10 pins, 1.27 mm pitch
+
+                     ┌─────────┐
+       1  VTref      │ ●     ● │   2  SWDIO
+       3  GND        │ ●     ● │   4  SWCLK
+       5  GND        │ ●     ● │   6  SWO
+       7  KEY        │       ● │   8  NC
+       9  GNDDetect  │ ●     ● │  10  nRESET
+                     └─────────┘
+
+   Pin 7 is the key: missing on the header, blocked on the mating plug.
+   That is what tells you which way round it goes.
+
+   Pin 1 is marked with a dot or a square pad. Silkscreen lies more often
+   than you would like: if there is no link, ring the pins out against GND
+   and power instead of trusting the labels.
+"@
+        pinoutHelp  = @"
+
+   IF THERE IS NO LINK
+
+   -  lower the SWD speed to 480 kHz;
+
+   -  keep wires under 10-15 cm, ground next to the signals;
+
+   -  power the board separately: a noticeable load drags the dongle down
+      and it stops enumerating on USB at all;
+
+   -  if the firmware took PA13/PA14 as ordinary GPIO, SWD disappears right
+      after startup - the UART bootloader via BOOT0 is what is left;
+
+   -  "Error: open failed" is not about the wiring but about the driver:
+      run tools\stlink-driver\stlink_winusb_install.bat as administrator,
+      before plugging the probe in.
 "@
         btnConnect  = 'Connect'
         btnDisconn  = 'Disconnect'
@@ -745,23 +825,52 @@ function Show-Pinout {
     if ($script:pinoutForm -and -not $script:pinoutForm.IsDisposed) { $script:pinoutForm.Activate(); return }
     $f = New-Object System.Windows.Forms.Form
     $f.Text = T 'ttlPinout'
-    # текст должен помещаться целиком, но не вылезать за экран на ноутбуке
-    $screen = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
-    $f.Size = New-Object System.Drawing.Size(660, [Math]::Min(700, $screen.Height - 60))
     $f.StartPosition = 'CenterParent'
     $f.BackColor = $clrPanel
     $f.Padding = New-Object System.Windows.Forms.Padding(10)
     $f.Font = New-Object System.Drawing.Font('Segoe UI', 9)
-    $box = New-Object System.Windows.Forms.RichTextBox
-    $box.Dock = 'Fill'
-    $box.Font = New-Object System.Drawing.Font('Consolas', 9)
-    $box.ReadOnly = $true
-    $box.BorderStyle = 'None'
-    $box.BackColor = $clrLogBg
-    $box.ForeColor = $clrText
-    $box.Text = T 'pinoutText'
-    $box.Select(0, 0)
-    $f.Controls.Add($box)
+
+    $tabs = New-Object System.Windows.Forms.TabControl
+    $tabs.Dock = 'Fill'
+    $tabs.Padding = New-Object System.Drawing.Point(10, 4)
+    $mono = New-Object System.Drawing.Font('Consolas', 9)
+
+    $width = 0; $height = 0
+    foreach ($part in @(@('tabWires', 'pinoutWires'), @('tabPkg', 'pinoutPkg'), @('tabHdr', 'pinoutHdr'), @('tabHelp', 'pinoutHelp'))) {
+        $page = New-Object System.Windows.Forms.TabPage
+        $page.Text = T $part[0]
+        $page.BackColor = $clrLogBg
+        $page.Padding = New-Object System.Windows.Forms.Padding(4)
+        $box = New-Object System.Windows.Forms.RichTextBox
+        $box.Dock = 'Fill'
+        $box.Font = $mono
+        $box.ReadOnly = $true
+        $box.BorderStyle = 'None'
+        $box.BackColor = $clrLogBg
+        $box.ForeColor = $clrText
+        # Перенос строк ломает таблицы и схемы: при другом масштабе экрана строка
+        # не влезает и разъезжается. Ширину окна считаем по тексту, чтобы этого
+        # не случилось.
+        $box.WordWrap = $false
+        $box.Text = T $part[1]
+        $box.Select(0, 0)
+        $page.Controls.Add($box)
+        [void]$tabs.TabPages.Add($page)
+
+        $lines = ($box.Text -split "`r?`n")
+        foreach ($line in $lines) {
+            $w = [System.Windows.Forms.TextRenderer]::MeasureText($line, $mono).Width
+            if ($w -gt $width) { $width = $w }
+        }
+        $h = $lines.Count * [System.Windows.Forms.TextRenderer]::MeasureText('0', $mono).Height
+        if ($h -gt $height) { $height = $h }
+    }
+    $f.Controls.Add($tabs)
+
+    $screen = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
+    $f.ClientSize = New-Object System.Drawing.Size(
+        [Math]::Min($width + 60, $screen.Width - 80),
+        [Math]::Min($height + 80, $screen.Height - 90))
     $script:pinoutForm = $f
     $f.Show($form)
 }
