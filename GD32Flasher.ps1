@@ -60,6 +60,52 @@ $Str = @{
         resetSoft   = 'Программный'
         resetHard   = 'Аппаратный (SRST)'
         btnDetect   = 'Определить чип'
+        btnPinout   = 'Как подключить провода'
+        ttlPinout   = 'Подключение программатора к плате'
+        pinoutText  = @"
+ЧТО СОЕДИНЯТЬ — четыре провода
+
+    Программатор              Плата
+    SWDIO   ───────────────   SWDIO    у GD32 и STM32 это вывод PA13
+    SWCLK   ───────────────   SWCLK    PA14
+    GND     ───────────────   GND
+    3.3V    ───────────────   3.3V     только если плата не питается сама
+
+  Землю вести ОТДЕЛЬНЫМ проводом рядом с SWDIO и SWCLK. Общая земля через
+  корпус или дальний контакт даёт срывы связи на скорости.
+
+  NRST нужен редко, и у многих клонов ST-Link V2 он просто не выведен.
+
+
+РАЗЪЁМ НА ПЛАТЕ — стандарт ARM Cortex Debug, 10 контактов, шаг 1.27 мм
+
+      1  VTref      ●  ●    2  SWDIO
+      3  GND        ●  ●    4  SWCLK
+      5  GND        ●  ●    6  SWO
+      7  KEY        ●  ●    8  NC
+      9  GNDDetect  ●  ●   10  nRESET
+
+  Первый контакт помечен точкой или квадратной площадкой, ключ разъёма —
+  со стороны выреза. Шелкография врёт чаще, чем хотелось бы: если связи
+  нет, прозвонить контакты до GND и питания.
+
+
+ST-LINK V2, клон-донгл
+
+  Контакты подписаны прямо на корпусе, нужны только четыре: 3.3V, SWDIO,
+  SWCLK, GND. SWIM рядом — это не SWD, а интерфейс STM8, с SWDIO не путать.
+  5 В на цель не подавать.
+
+
+ЕСЛИ СВЯЗИ НЕТ
+
+  • понизить частоту SWD до 480 кГц;
+  • провода короче 10-15 см, земля рядом с сигнальными;
+  • питать плату отдельно, а не от программатора: заметная нагрузка сажает
+    донгл, и он перестаёт опознаваться даже на USB;
+  • если прошивка заняла PA13/PA14 под обычные GPIO, SWD пропадает сразу
+    после старта — остаётся UART-загрузчик через BOOT0.
+"@
         btnConnect  = 'Подключиться'
         btnDisconn  = 'Отключиться'
         grpInfo     = 'ИНФОРМАЦИЯ О ЦЕЛИ'
@@ -154,6 +200,52 @@ $Str = @{
         resetSoft   = 'Software'
         resetHard   = 'Hardware (SRST)'
         btnDetect   = 'Detect chip'
+        btnPinout   = 'How to wire it up'
+        ttlPinout   = 'Wiring the probe to the board'
+        pinoutText  = @"
+WHAT TO CONNECT - four wires
+
+    Probe                     Board
+    SWDIO   ───────────────   SWDIO    on GD32 and STM32 this is pin PA13
+    SWCLK   ───────────────   SWCLK    PA14
+    GND     ───────────────   GND
+    3.3V    ───────────────   3.3V     only if the board has no power of its own
+
+  Run the ground as a SEPARATE wire next to SWDIO and SWCLK. A shared ground
+  through the case or a distant pin causes dropouts at speed.
+
+  NRST is rarely needed, and many ST-Link V2 clones do not expose it at all.
+
+
+BOARD CONNECTOR - ARM Cortex Debug standard, 10 pins, 1.27 mm pitch
+
+      1  VTref      ●  ●    2  SWDIO
+      3  GND        ●  ●    4  SWCLK
+      5  GND        ●  ●    6  SWO
+      7  KEY        ●  ●    8  NC
+      9  GNDDetect  ●  ●   10  nRESET
+
+  Pin 1 is marked with a dot or a square pad, and the key sits on the notched
+  side. Silkscreen lies more often than you would like: if there is no link,
+  ring the pins out against GND and power.
+
+
+ST-LINK V2 DONGLE CLONE
+
+  The pins are labelled on the case itself; only four are needed: 3.3V, SWDIO,
+  SWCLK, GND. SWIM next to them is not SWD - it is the STM8 interface, do not
+  confuse it with SWDIO. Never feed 5 V to the target.
+
+
+IF THERE IS NO LINK
+
+  - lower the SWD speed to 480 kHz;
+  - keep wires under 10-15 cm, ground next to the signals;
+  - power the board separately: a noticeable load drags the dongle down and it
+    stops enumerating on USB at all;
+  - if the firmware took PA13/PA14 as ordinary GPIO, SWD disappears right after
+    startup - the UART bootloader via BOOT0 is what is left.
+"@
         btnConnect  = 'Connect'
         btnDisconn  = 'Disconnect'
         grpInfo     = 'TARGET INFORMATION'
@@ -648,6 +740,32 @@ function New-Val($text, $x, $y) {
      $l.ForeColor = $clrSideText
     return $l
 }
+# Немодально: окно держат открытым, пока цепляют провода.
+function Show-Pinout {
+    if ($script:pinoutForm -and -not $script:pinoutForm.IsDisposed) { $script:pinoutForm.Activate(); return }
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = T 'ttlPinout'
+    # текст должен помещаться целиком, но не вылезать за экран на ноутбуке
+    $screen = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
+    $f.Size = New-Object System.Drawing.Size(660, [Math]::Min(700, $screen.Height - 60))
+    $f.StartPosition = 'CenterParent'
+    $f.BackColor = $clrPanel
+    $f.Padding = New-Object System.Windows.Forms.Padding(10)
+    $f.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $box = New-Object System.Windows.Forms.RichTextBox
+    $box.Dock = 'Fill'
+    $box.Font = New-Object System.Drawing.Font('Consolas', 9)
+    $box.ReadOnly = $true
+    $box.BorderStyle = 'None'
+    $box.BackColor = $clrLogBg
+    $box.ForeColor = $clrText
+    $box.Text = T 'pinoutText'
+    $box.Select(0, 0)
+    $f.Controls.Add($box)
+    $script:pinoutForm = $f
+    $f.Show($form)
+}
+
 function New-Combo($x, $y, $w) {
     $c = New-Object System.Windows.Forms.ComboBox
     $c.Location = New-Object System.Drawing.Point($x, $y)
@@ -836,6 +954,13 @@ $hint.Width = 270
 $hint.Height = 112
 $hint.Margin = New-Object System.Windows.Forms.Padding(0, 12, 0, 0)
 $sideFlow.Controls.Add($hint)
+
+$btnPinout = New-Btn '' $clrBtnAlt
+$btnPinout.AutoSize = $false
+$btnPinout.Size = New-Object System.Drawing.Size(270, 32)
+$btnPinout.Margin = New-Object System.Windows.Forms.Padding(0, 4, 0, 8)
+$btnPinout.Add_Click({ Show-Pinout })
+$sideFlow.Controls.Add($btnPinout)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
@@ -1180,6 +1305,9 @@ function Apply-Language {
         $btnReset.Text = T 'btnReset'
         $btnClear.Text = T 'btnClear'
     $btnDetect.Text = T 'btnDetect'
+    $btnPinout.Text = T 'btnPinout'
+    # окно распиновки живёт своей жизнью: пересоздадим его на новом языке
+    if ($script:pinoutForm -and -not $script:pinoutForm.IsDisposed) { $script:pinoutForm.Close(); Show-Pinout }
 
     $idx = if ($cmbReset.SelectedIndex -ge 0) { $cmbReset.SelectedIndex } else { 0 }
     $cmbReset.Items.Clear()
