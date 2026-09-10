@@ -209,6 +209,9 @@ $Str = @{
         logDetectCpu= 'Ядро определилось ({0}), но подходящий драйвер Flash не найден среди типовых. Выберите конфигурацию вручную.'
         logDetectNo = 'Чип не отвечает. Проверьте питание платы, подключение SWDIO/SWCLK/GND и понизьте частоту до 480 кГц.'
         logBackupNo = 'Операция отменена: не удалось снять дамп.'
+        logBackupFF = 'Дамп состоит из одних 0xFF — по адресу {0} нет содержимого. Проверьте поле «Адрес»: основная Flash начинается с 0x08000000. Это не резервная копия, продолжать нельзя.'
+        logNoBank   = 'OpenOCD не нашёл банк Flash по этому адресу — записывать было некуда. Основная Flash начинается с 0x08000000.'
+        logAddrFromImage = 'Образ {0} хранит адреса внутри себя — поле «Адрес» к нему не применяется, запись пойдёт по адресам из файла.'
         ttlPrepare  = '=== Подготовка ==='
         ttlHalt     = 'Остановка ядра'
         ttlWrite    = 'Запись прошивки'
@@ -222,7 +225,7 @@ $Str = @{
         ttlBackup   = 'Резервный дамп -> {0}'
         ttlConn     = '=== Подключение: {0} / {1} / {2} кГц ==='
         msgErase    = 'Стереть Flash полностью? Данные будут потеряны.'
-        msgUnlock   = "Снятие защиты выполняет полное стирание кристалла (mass erase). Продолжить?`r`n`r`nПосле операции обязательно снять и подать питание платы: option bytes применяются только по power-on reset."
+        msgUnlock   = "Снятие защиты выполняет полное стирание кристалла (mass erase). Продолжить?`r`n`r`nСтирание произойдёт при следующей подаче питания: option bytes применяются только по power-on reset. Если прошивка нужна — СНАЧАЛА снимите дамп и убедитесь, что файл не пустой. После обесточивания платы восстановить её будет уже нечем."
         msgConfirm  = 'Подтверждение'
         dlgFw       = 'Прошивка (*.bin;*.hex;*.elf)|*.bin;*.hex;*.elf|Все файлы (*.*)|*.*'
         dlgDump     = 'Дамп (*.bin)|*.bin'
@@ -389,6 +392,9 @@ $Str = @{
         logDetectCpu= 'Core detected ({0}), but no matching flash driver among the common ones. Pick a config manually.'
         logDetectNo = 'No response from the chip. Check board power, SWDIO/SWCLK/GND wiring and lower the speed to 480 kHz.'
         logBackupNo = 'Operation cancelled: the backup dump failed.'
+        logBackupFF = 'The dump is all 0xFF - there is nothing at address {0}. Check the Address field: the main flash starts at 0x08000000. This is not a backup, so the operation cannot continue.'
+        logNoBank   = 'OpenOCD found no flash bank at this address - there was nowhere to write. The main flash starts at 0x08000000.'
+        logAddrFromImage = 'A {0} image carries its own addresses - the Address field does not apply to it, the data goes where the file says.'
         ttlPrepare  = '=== Preparing ==='
         ttlHalt     = 'Halting the core'
         ttlWrite    = 'Programming'
@@ -402,7 +408,7 @@ $Str = @{
         ttlBackup   = 'Backup dump -> {0}'
         ttlConn     = '=== Connecting: {0} / {1} / {2} kHz ==='
         msgErase    = 'Erase the whole flash? The data will be lost.'
-        msgUnlock   = "Removing protection performs a full chip erase (mass erase). Continue?`r`n`r`nAfter that, power-cycle the board: option bytes only apply on a power-on reset."
+        msgUnlock   = "Removing protection performs a full chip erase (mass erase). Continue?`r`n`r`nThe erase happens on the next power-up: option bytes only apply on a power-on reset. If you need the firmware, read a dump FIRST and check the file is not empty. Once the board is powered down there will be nothing left to restore it from."
         msgConfirm  = 'Confirm'
         dlgFw       = 'Firmware (*.bin;*.hex;*.elf)|*.bin;*.hex;*.elf|All files (*.*)|*.*'
         dlgDump     = 'Dump (*.bin)|*.bin'
@@ -570,6 +576,8 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
 # Без него операция считается успешной по отсутствию ошибок, а этого мало: запись
 # падала с «Error: couldn't open ...», ошибка уходила в лог OpenOCD мимо ответа
 # telnet, и результат рапортовался как успешный.
+# Число байт в признаке — строго ненулевое: «wrote 0 bytes» означает, что банк для
+# адреса не нашёлся и записывать было некуда.
 function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300, [string]$expect = '') {
     LogHead "=== $title ==="
     Set-Busy $true $title
@@ -590,6 +598,10 @@ function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300, [string]$
     $answer = (($out -split "`r?`n") | Where-Object { $_ -notmatch $noise -and $_ -notmatch '(?i)^\s*(info|warn|debug)\s*:' }) -join "`n"
     # В логе OpenOCD ошибка — строго строка «Error: ...».
     $ok = ($answer -notmatch '(?im)^\s*(error\b|.*\bfailed\b|.*timed out)') -and ($logged -notmatch '(?m)^\s*Error:')
+    # «no flash bank found for address ...» приходит уровнем Warn и фильтром выше не
+    # ловится, а означает, что писать было некуда: адрес вне карты Flash. После него
+    # любая операция бессмысленна, каким бы ни был ответ команды.
+    if ($ok -and (($out + "`n" + $logged) -match 'no flash bank found')) { $ok = $false; LogErr (T 'logNoBank') }
     if ($ok -and $expect -ne '') {
         $ok = (($out + "`n" + $logged) -match $expect)
         if (-not $ok) { LogErr ((T 'logNoProof') -f $title) }
@@ -754,8 +766,11 @@ function Get-Fw {
     # -PathType Leaf: у папки Test-Path тоже истинен, и её копия делала из fw.bin
     # каталог — OpenOCD отвечал «couldn't open», а операция считалась успешной.
     if (-not (Test-Path -LiteralPath $txtFile.Text -PathType Leaf)) { LogErr (T 'logNoFile'); return $null }
-    # копия в латинский путь без пробелов — снимает проблемы с кириллицей и длинными именами
-    $dst = Join-Path $Work 'fw.bin'
+    # копия в латинский путь без пробелов — снимает проблемы с кириллицей и длинными именами.
+    # Расширение сохраняем: по нему видно формат образа, и OpenOCD не приходится гадать.
+    $ext = [IO.Path]::GetExtension($txtFile.Text).ToLower()
+    if ($ext -notmatch '^\.[a-z0-9]+$') { $ext = '.bin' }
+    $dst = Join-Path $Work "fw$ext"
     try {
         Copy-Item -LiteralPath $txtFile.Text -Destination $dst -Force -ErrorAction Stop
     } catch {
@@ -767,12 +782,36 @@ function Get-Fw {
     return $dst
 }
 
+# Аргумент offset у flash write_image и verify_image — не «куда писать», а смещение,
+# которое ПРИБАВЛЯЕТСЯ к адресам из образа. У .bin адресов внутри нет, там offset и есть
+# адрес записи. А у .hex, .elf и .s19 они свои: 10.09.2026 к 0x08000000 из hex-файла
+# прибавилось 0x08000000 из поля «Адрес», запись ушла на 0x10000000, где банка нет,
+# и OpenOCD написал «wrote 0 bytes». Для таких образов offset не передаём вовсе.
+function Get-ImageOffset([string]$path) {
+    if ([IO.Path]::GetExtension($path).ToLower() -eq '.bin') { return " $($txtAddr.Text)" }
+    LogInfo ((T 'logAddrFromImage') -f [IO.Path]::GetExtension($path).TrimStart('.').ToUpper())
+    return ''
+}
+
+# Стёртая Flash читается как сплошные 0xFF; так же читается и адрес, за которым
+# памяти нет вовсе. И то и другое означает, что сохранять было нечего.
+function Test-DumpHasData([string]$path) {
+    try { $bytes = [IO.File]::ReadAllBytes($path) } catch { return $false }
+    if ($bytes.Length -eq 0) { return $false }
+    foreach ($b in $bytes) { if ($b -ne 0xFF) { return $true } }
+    return $false
+}
+
 function Invoke-Backup {
     $name = 'backup_{0:yyyyMMdd_HHmmss}.bin' -f (Get-Date)
     $dst = Join-Path $Work $name
-    $ok = Ocd-Run "dump_image $(ConvertTo-TclPath $dst) $($txtAddr.Text) $($txtSize.Text)" ((T 'ttlBackup') -f $name) 300 'dumped\s+\d+\s+bytes'
+    $ok = Ocd-Run "dump_image $(ConvertTo-TclPath $dst) $($txtAddr.Text) $($txtSize.Text)" ((T 'ttlBackup') -f $name) 300 'dumped\s+[1-9]\d*\s+bytes'
     # бэкап без файла на диске — не бэкап, дальше идти нельзя
     if ($ok -and -not (Test-Path -LiteralPath $dst -PathType Leaf)) { $ok = $false; LogErr ((T 'logNoProof') -f $name) }
+    # ...и файл из одних 0xFF — тоже не бэкап. 10.09.2026 адрес был задан 0x10000000,
+    # где банка нет: dump_image отдал полновесные 131072 байта пустоты, «успешно», и
+    # следом пошло снятие защиты уже без всякой резервной копии.
+    if ($ok -and -not (Test-DumpHasData $dst)) { $ok = $false; LogErr ((T 'logBackupFF') -f $txtAddr.Text) }
     if ($ok) { LogOk ((T 'logDumpSave') -f $dst) }
     return $ok
 }
@@ -1205,9 +1244,10 @@ $btnProgram.Add_Click({
     $fw = Get-Fw; if (-not $fw) { return }
     if ($chkBackup.Checked -and -not (Invoke-Backup)) { LogErr (T 'logBackupNo'); return }
     $t = ConvertTo-TclPath $fw
+    $off = Get-ImageOffset $fw
     if (Ocd-Run 'reset halt' (T 'ttlHalt') 30) {
-        if (Ocd-Run "flash write_image erase $t $($txtAddr.Text)" (T 'ttlWrite') 300 'wrote\s+\d+\s+bytes') {
-            if (Ocd-Run "verify_image $t $($txtAddr.Text)" (T 'ttlVerify') 300 'verified\s+\d+\s+bytes') {
+        if (Ocd-Run "flash write_image erase $t$off" (T 'ttlWrite') 300 'wrote\s+[1-9]\d*\s+bytes') {
+            if (Ocd-Run "verify_image $t$off" (T 'ttlVerify') 300 'verified\s+[1-9]\d*\s+bytes') {
                 Ocd-Run 'reset run' (T 'ttlRun') 30 | Out-Null
             }
         }
@@ -1218,8 +1258,9 @@ $btnVerify = New-Btn '' $clrBtn
 $btnVerify.Add_Click({
     if (-not (Require-Connection)) { return }
     $fw = Get-Fw; if (-not $fw) { return }
+    $off = Get-ImageOffset $fw
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
-    Ocd-Run "verify_image $(ConvertTo-TclPath $fw) $($txtAddr.Text)" (T 'ttlVerify') 300 'verified\s+\d+\s+bytes' | Out-Null
+    Ocd-Run "verify_image $(ConvertTo-TclPath $fw)$off" (T 'ttlVerify') 300 'verified\s+[1-9]\d*\s+bytes' | Out-Null
 })
 
 $btnRead = New-Btn '' $clrBtn
@@ -1230,7 +1271,7 @@ $btnRead.Add_Click({
     if ($d.ShowDialog() -ne 'OK') { return }
     $tmp = Join-Path $Work 'dump.bin'
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
-    if (Ocd-Run "dump_image $(ConvertTo-TclPath $tmp) $($txtAddr.Text) $($txtSize.Text)" (T 'ttlRead') 300 'dumped\s+\d+\s+bytes') {
+    if (Ocd-Run "dump_image $(ConvertTo-TclPath $tmp) $($txtAddr.Text) $($txtSize.Text)" (T 'ttlRead') 300 'dumped\s+[1-9]\d*\s+bytes') {
         Copy-Item -LiteralPath $tmp -Destination $d.FileName -Force
         LogOk ((T 'logDumpSave') -f $d.FileName)
     }
