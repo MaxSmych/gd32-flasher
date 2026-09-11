@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.6.1'
+$AppVersion = '1.6.2'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -219,6 +219,7 @@ $Str = @{
         logDetectRetry = 'Первый запуск OpenOCD ничего не ответил (холодный старт) — повторяю.'
         updFound    = 'Доступна версия {0} (у вас {1}). Нажмите «Обновить», чтобы поставить её.'
         updNone     = 'Установлена последняя версия.'
+        updNoCheck  = 'Проверить обновления не удалось: {0}'
         updBtn      = 'Обновить до {0}'
         updChecking = 'Проверяю обновления...'
         updDownload = 'Скачиваю обновление, это 8 МБ...'
@@ -425,6 +426,7 @@ $Str = @{
         logDetectRetry = 'The first OpenOCD run answered nothing (cold start) - trying again.'
         updFound    = 'Version {0} is available (you have {1}). Press Update to install it.'
         updNone     = 'You are on the latest version.'
+        updNoCheck  = 'Could not check for updates: {0}'
         updBtn      = 'Update to {0}'
         updChecking = 'Checking for updates...'
         updDownload = 'Downloading the update, 8 MB...'
@@ -748,12 +750,25 @@ $RepoZip = 'https://github.com/MaxSmych/gd32-flasher/archive/refs/heads/main.zip
 # Тихо: нет сети, закрыт GitHub, корпоративный прокси — молча возвращаем $null.
 # Утилита должна запускаться одинаково быстро и в цеху без интернета.
 function Get-LatestVersion {
+    $script:updError = $null
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $r = Invoke-WebRequest -Uri $RepoRaw -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+        # В корпоративной сети трафик идёт через прокси, и он обычно требует доменную
+        # учётку. Без этих двух строк запрос молча упирается в 407 и выглядит как
+        # «интернета нет».
+        $req = @{ Uri = $RepoRaw; UseBasicParsing = $true; TimeoutSec = 5; ErrorAction = 'Stop' }
+        $proxy = [Net.WebRequest]::GetSystemWebProxy().GetProxy($RepoRaw)
+        if ($proxy -and $proxy.AbsoluteUri -ne $RepoRaw) {
+            $req['Proxy'] = $proxy.AbsoluteUri
+            $req['ProxyUseDefaultCredentials'] = $true
+        }
+        $r = Invoke-WebRequest @req
         $v = ([string]$r.Content).Trim()
         if ($v -match '^\d+\.\d+\.\d+$') { return $v }
-    } catch { }
+        $script:updError = 'ответ не похож на номер версии'
+    } catch {
+        $script:updError = $_.Exception.Message
+    }
     return $null
 }
 
@@ -774,7 +789,13 @@ function Install-Update([string]$version, [string]$dest) {
         LogInfo (T 'updDownload')
         Set-Busy $true (T 'updDownload')
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $RepoZip -OutFile $zip -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+        $req = @{ Uri = $RepoZip; OutFile = $zip; UseBasicParsing = $true; TimeoutSec = 300; ErrorAction = 'Stop' }
+        $proxy = [Net.WebRequest]::GetSystemWebProxy().GetProxy($RepoZip)
+        if ($proxy -and $proxy.AbsoluteUri -ne $RepoZip) {
+            $req['Proxy'] = $proxy.AbsoluteUri
+            $req['ProxyUseDefaultCredentials'] = $true
+        }
+        Invoke-WebRequest @req
         Expand-Archive -Path $zip -DestinationPath $tmp -Force
 
         # Внутри архива — папка вида gd32-flasher-main, внутри неё app. Проверяем, что она на месте
@@ -1845,12 +1866,18 @@ $form.Add_Shown({
         $btnConnect.Enabled = $true
         $btnDetect.Enabled = $true
 
-        # Проверка обновления — тихая: три секунды на ответ, и ни строчки, если сети нет.
+        # Проверка обновления. Молчать нельзя: 11.09.2026 на боевой машине кнопка не
+        # появилась, и по окну было не понять — то ли версия последняя, то ли запрос
+        # вообще не ушёл. Одна строка в логе снимает этот вопрос.
         $script:newVersion = Test-UpdateAvailable
         if ($script:newVersion) {
             LogOk ((T 'updFound') -f $script:newVersion, $AppVersion)
             $btnUpdate.Text = (T 'updBtn') -f $script:newVersion
             $btnUpdate.Visible = $true
+        } elseif ($script:updError) {
+            LogInfo ((T 'updNoCheck') -f $script:updError)
+        } else {
+            LogInfo (T 'updNone')
         }
         # Прошивка из прошлого запуска — только если файл ещё на месте.
         if (Test-Path -LiteralPath $LastFile -PathType Leaf) {
