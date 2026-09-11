@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.5.0'
+$AppVersion = '1.5.1'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -216,6 +216,7 @@ $Str = @{
         logDetectId = 'Device ID {0}: семейство {1} — это {2}. Драйвер Flash: {3}.'
         logDetectIdNo = 'Device ID {0} (семейство {1}) в таблице не значится — перебираю конфигурации.'
         logDetectWhy= '  {0}: Device ID {1}, Flash {2} {3}'
+        logDetectRetry = 'Первый запуск OpenOCD ничего не ответил (холодный старт) — повторяю.'
         logProbeDead= 'Программатор отвечает пустым идентификатором (VID:PID 0000:0000) — он «слетел» и работать не может. Выньте и вставьте донгл. Провода и питание платы тут ни при чём; если он питает плату, подключите её к отдельному источнику.'
         logDetectGo = 'Перебираю конфигурации, это занимает до полуминуты.'
         logDetectTry= '  проверяю: {0}'
@@ -412,6 +413,7 @@ $Str = @{
         logDetectId = 'Device ID {0}: family {1} - that is {2}. Flash driver: {3}.'
         logDetectIdNo = 'Device ID {0} (family {1}) is not in the table - falling back to trying configs.'
         logDetectWhy= '  {0}: Device ID {1}, flash {2} {3}'
+        logDetectRetry = 'The first OpenOCD run answered nothing (cold start) - trying again.'
         logProbeDead= 'The probe reports an empty identifier (VID:PID 0000:0000) - it has fallen over and cannot work. Unplug the dongle and plug it back in. This is not about the wiring or the board power; if the dongle feeds the board, give the board its own supply.'
         logDetectGo = 'Trying configs, this takes up to half a minute.'
         logDetectTry= '  trying: {0}'
@@ -752,6 +754,21 @@ function Test-ProbeAlive([string]$txt) {
     return $true
 }
 
+# Device ID из вывода OpenOCD → конфиг по таблице семейств. Возвращает $null, если id
+# в выводе нет или семейство незнакомое.
+function Get-CfgByDeviceId([string]$txt) {
+    if ($txt -notmatch 'device id = (0x[0-9a-fA-F]+)') { return $null }
+    $id = [Convert]::ToUInt32($Matches[1], 16)
+    $fam = $id -band 0xFFF
+    $hit = $script:IdTable[[int]$fam]
+    if ($hit) {
+        LogOk ((T 'logDetectId') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam), $hit.Name, $hit.Cfg)
+        return $hit.Cfg
+    }
+    LogInfo ((T 'logDetectIdNo') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam))
+    return $null
+}
+
 # Короткая выжимка из вывода кандидата: что ответил OpenOCD и почему это не подошло.
 function Show-CandidateResult([string]$name, [string]$txt) {
     $id = if ($txt -match 'device id = (0x[0-9a-fA-F]+)') { $Matches[1] } else { '--' }
@@ -770,28 +787,30 @@ function Find-Target {
     try {
         # Шаг 1: DEVICE ID. Читаем его через flash probe: mdw в разовом запуске молчит,
         # его вывод идёт через command_print и до stdout не доходит.
+        # Первый за сеанс запуск OpenOCD часто возвращает пустоту — холодный старт exe
+        # сразу после распаковки. Пустой вывод это не ответ, а несостоявшаяся попытка:
+        # повторяем, иначе определение срывается именно на первом нажатии.
         $txt = Invoke-OpenOcdOnce 'stm32f1x' @('init; flash probe 0; shutdown')
+        if ($txt.Trim() -eq '') {
+            LogInfo (T 'logDetectRetry')
+            $txt = Invoke-OpenOcdOnce 'stm32f1x' @('init; flash probe 0; shutdown')
+        }
         if (-not (Test-ProbeAlive $txt)) { return }
         if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
-        if ($txt -match 'device id = (0x[0-9a-fA-F]+)') {
-            $id = [Convert]::ToUInt32($Matches[1], 16)
-            $fam = $id -band 0xFFF
-            $hit = $script:IdTable[[int]$fam]
-            if ($hit) {
-                $found = $hit.Cfg
-                LogOk ((T 'logDetectId') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam), $hit.Name, $hit.Cfg)
-            } else {
-                LogInfo ((T 'logDetectIdNo') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam))
-            }
-        }
+        $found = Get-CfgByDeviceId $txt
 
-        # Шаг 2: чип неизвестен — перебор, но теперь видно, что ответил каждый кандидат.
+        # Шаг 2: id не прочитался или семейство незнакомое — перебор. Но Device ID
+        # главнее имени согласившегося конфига: 11.09.2026 первый запуск вернул пустоту,
+        # перебор дошёл до stm32f0x, тот отдал 0x17120410 — и программа выбрала stm32f0x,
+        # хотя id в этой же строке означал stm32f1x.
         if (-not $found) {
             LogInfo (T 'logDetectGo')
             foreach ($t in @('stm32f1x', 'stm32f0x', 'stm32f3x', 'stm32f2x', 'stm32f4x', 'stm32g0x', 'stm32l4x', 'stm32h7x')) {
                 $txt = Invoke-OpenOcdOnce $t @('init; flash probe 0; shutdown')
                 Show-CandidateResult $t $txt
                 if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
+                $found = Get-CfgByDeviceId $txt
+                if ($found) { break }
                 if ($txt -match 'flash size = (\d+)\s*KiB' -and $txt -notmatch 'probe failed') {
                     $found = $t
                     LogOk ((T 'logDetectHit') -f $t, $cpuSeen, $Matches[1])
