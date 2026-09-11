@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.4.0'
+$AppVersion = '1.5.0'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -213,6 +213,10 @@ $Str = @{
         logConnFail = 'Подключиться не удалось. Проверьте кабель, питание платы и выбранный конфиг цели.'
         logDumpSave = 'Дамп сохранён: {0}'
         logDetect   = '=== Автоопределение чипа ==='
+        logDetectId = 'Device ID {0}: семейство {1} — это {2}. Драйвер Flash: {3}.'
+        logDetectIdNo = 'Device ID {0} (семейство {1}) в таблице не значится — перебираю конфигурации.'
+        logDetectWhy= '  {0}: Device ID {1}, Flash {2} {3}'
+        logProbeDead= 'Программатор отвечает пустым идентификатором (VID:PID 0000:0000) — он «слетел» и работать не может. Выньте и вставьте донгл. Провода и питание платы тут ни при чём; если он питает плату, подключите её к отдельному источнику.'
         logDetectGo = 'Перебираю конфигурации, это занимает до полуминуты.'
         logDetectTry= '  проверяю: {0}'
         logDetectHit= '  подходит: {0} — ядро {1}, Flash {2} КБ'
@@ -405,6 +409,10 @@ $Str = @{
         logConnFail = 'Connection failed. Check the cable, board power and the selected target config.'
         logDumpSave = 'Dump saved: {0}'
         logDetect   = '=== Chip autodetection ==='
+        logDetectId = 'Device ID {0}: family {1} - that is {2}. Flash driver: {3}.'
+        logDetectIdNo = 'Device ID {0} (family {1}) is not in the table - falling back to trying configs.'
+        logDetectWhy= '  {0}: Device ID {1}, flash {2} {3}'
+        logProbeDead= 'The probe reports an empty identifier (VID:PID 0000:0000) - it has fallen over and cannot work. Unplug the dongle and plug it back in. This is not about the wiring or the board power; if the dongle feeds the board, give the board its own supply.'
         logDetectGo = 'Trying configs, this takes up to half a minute.'
         logDetectTry= '  trying: {0}'
         logDetectHit= '  match: {0} - core {1}, flash {2} KB'
@@ -711,23 +719,84 @@ function Invoke-OpenOcdOnce([string]$targetCfg, [string[]]$cmds, [int]$waitSec =
     return $text
 }
 
-# Подбирает конфигурацию цели перебором: пользователю не нужно знать, что GD32F330
-# шьётся драйвером с именем stm32f1x.
+# Младшие 12 бит DEVICE ID — это семейство контроллера Flash, то есть ровно то, что
+# выбирает драйвер. GD32 отдают коды своих прототипов STM32: GD32E103 и GD32F330 оба
+# дают 0x410, medium-density F1. Замер 11.09.2026 на GD32E103CBT6: конфиги stm32f1x,
+# stm32f0x и stm32f3x ОДИНАКОВО отвечали «flash size = 128 KiB», поэтому перебор
+# выбирал первого согласившегося — то есть случайного из трёх. Device ID у всех трёх
+# был один и тот же и указывал на stm32f1x.
+$script:IdTable = @{
+    0x410 = @{ Name = 'STM32F1 / GD32 medium-density'; Cfg = 'stm32f1x' }
+    0x412 = @{ Name = 'STM32F1 low-density';           Cfg = 'stm32f1x' }
+    0x414 = @{ Name = 'STM32F1 high-density';          Cfg = 'stm32f1x' }
+    0x418 = @{ Name = 'STM32F1 connectivity line';     Cfg = 'stm32f1x' }
+    0x420 = @{ Name = 'STM32F1 value line';            Cfg = 'stm32f1x' }
+    0x428 = @{ Name = 'STM32F1 high-density value';    Cfg = 'stm32f1x' }
+    0x430 = @{ Name = 'STM32F1 XL-density';            Cfg = 'stm32f1x' }
+    0x440 = @{ Name = 'STM32F0';                       Cfg = 'stm32f0x' }
+    0x442 = @{ Name = 'STM32F09x';                     Cfg = 'stm32f0x' }
+    0x444 = @{ Name = 'STM32F03x';                     Cfg = 'stm32f0x' }
+    0x445 = @{ Name = 'STM32F04x';                     Cfg = 'stm32f0x' }
+    0x448 = @{ Name = 'STM32F07x';                     Cfg = 'stm32f0x' }
+    0x422 = @{ Name = 'STM32F303/F358';                Cfg = 'stm32f3x' }
+    0x432 = @{ Name = 'STM32F37x';                     Cfg = 'stm32f3x' }
+    0x438 = @{ Name = 'STM32F334';                     Cfg = 'stm32f3x' }
+    0x439 = @{ Name = 'STM32F301/F302';                Cfg = 'stm32f3x' }
+    0x446 = @{ Name = 'STM32F303xE';                   Cfg = 'stm32f3x' }
+}
+
+# Нулевой VID:PID — донгл слетел: Windows его показывает, а дескриптор читается мусором.
+# Лечится только физическим переподключением, никакие провода и питание тут ни при чём.
+function Test-ProbeAlive([string]$txt) {
+    if ($txt -match 'VID:PID 0000:0000' -or $txt -match 'API v0\)') { LogErr ((T 'logProbeDead') + "`r`n"); return $false }
+    return $true
+}
+
+# Короткая выжимка из вывода кандидата: что ответил OpenOCD и почему это не подошло.
+function Show-CandidateResult([string]$name, [string]$txt) {
+    $id = if ($txt -match 'device id = (0x[0-9a-fA-F]+)') { $Matches[1] } else { '--' }
+    $sz = if ($txt -match 'flash size = (\d+)\s*KiB') { "$($Matches[1]) KB" } else { '--' }
+    $er = ($txt -split "`r?`n" | Where-Object { $_ -match '^\s*Error' } | Select-Object -First 1)
+    LogInfo ((T 'logDetectWhy') -f $name, $id, $sz, $er)
+}
+
+# Подбирает конфигурацию цели: сначала по DEVICE ID (один запуск, однозначный ответ),
+# и только если чип неизвестен — перебором, как раньше, но с причиной по каждому кандидату.
 function Find-Target {
     LogHead (T 'logDetect')
-    LogInfo (T 'logDetectGo')
     Set-Busy $true (T 'stDetect')
     $found = $null
     $cpuSeen = $null
     try {
-        foreach ($t in @('stm32f1x', 'stm32f0x', 'stm32f3x', 'stm32f2x', 'stm32f4x', 'stm32g0x', 'stm32l4x', 'stm32h7x')) {
-            LogInfo ((T 'logDetectTry') -f $t)
-            $txt = Invoke-OpenOcdOnce $t @('init; flash probe 0; shutdown')
-            if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
-            if ($txt -match 'flash size = (\d+)\s*KiB' -and $txt -notmatch 'probe failed') {
-                $found = $t
-                LogOk ((T 'logDetectHit') -f $t, $cpuSeen, $Matches[1])
-                break
+        # Шаг 1: DEVICE ID. Читаем его через flash probe: mdw в разовом запуске молчит,
+        # его вывод идёт через command_print и до stdout не доходит.
+        $txt = Invoke-OpenOcdOnce 'stm32f1x' @('init; flash probe 0; shutdown')
+        if (-not (Test-ProbeAlive $txt)) { return }
+        if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
+        if ($txt -match 'device id = (0x[0-9a-fA-F]+)') {
+            $id = [Convert]::ToUInt32($Matches[1], 16)
+            $fam = $id -band 0xFFF
+            $hit = $script:IdTable[[int]$fam]
+            if ($hit) {
+                $found = $hit.Cfg
+                LogOk ((T 'logDetectId') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam), $hit.Name, $hit.Cfg)
+            } else {
+                LogInfo ((T 'logDetectIdNo') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam))
+            }
+        }
+
+        # Шаг 2: чип неизвестен — перебор, но теперь видно, что ответил каждый кандидат.
+        if (-not $found) {
+            LogInfo (T 'logDetectGo')
+            foreach ($t in @('stm32f1x', 'stm32f0x', 'stm32f3x', 'stm32f2x', 'stm32f4x', 'stm32g0x', 'stm32l4x', 'stm32h7x')) {
+                $txt = Invoke-OpenOcdOnce $t @('init; flash probe 0; shutdown')
+                Show-CandidateResult $t $txt
+                if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
+                if ($txt -match 'flash size = (\d+)\s*KiB' -and $txt -notmatch 'probe failed') {
+                    $found = $t
+                    LogOk ((T 'logDetectHit') -f $t, $cpuSeen, $Matches[1])
+                    break
+                }
             }
         }
     } finally { Set-Busy $false (T 'stReady') }
@@ -802,8 +871,10 @@ function Ocd-Connect {
 # Завершение сессии с жёстким бюджетом времени. Раньше закрытие окна ждало ответа на
 # «shutdown» до 5 секунд, крутя DoEvents, и ещё 3 секунды выхода процесса — а при
 # выдернутом донгле OpenOCD в это время висит в USB-вызове и сыплет ошибки в лог.
-# Теперь: команду отправляем, но ответ не ждём; на самостоятельный выход даём 800 мс
-# (штатный путь, при нём USB-устройство закрывается корректно), дальше Kill.
+# Замер 11.09.2026 на живой сессии: по «shutdown» из telnet процесс НЕ завершается
+# вовсе — ни за 800 мс, ни за 10 секунд, и закрытие сокета его тоже не трогает.
+# Выход всегда делает Kill, поэтому ждать и нечего: команду отправляем (вдруг сборка
+# другая), даём 200 мс на удачу и убиваем.
 # $Quiet — закрытие программы: лог и панель уже не нужны.
 function Stop-Session([switch]$Quiet) {
     if ($Quiet) { $script:closing = $true }
@@ -823,7 +894,7 @@ function Stop-Session([switch]$Quiet) {
 
     if ($script:proc) {
         try {
-            if (-not $script:proc.WaitForExit(800)) {
+            if (-not $script:proc.WaitForExit(200)) {
                 try { $script:proc.Kill() } catch { }
                 [void]$script:proc.WaitForExit(1500)
             }
