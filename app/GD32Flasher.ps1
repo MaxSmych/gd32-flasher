@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.6.2'
+$AppVersion = '1.6.3'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -1368,8 +1368,10 @@ function New-SideCombo {
     $combo.ForeColor = [System.Drawing.Color]::FromArgb(238, 246, 252)
     $combo.BackColor = [System.Drawing.Color]::FromArgb(13, 55, 86)
     $combo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 5)
-    $combo.Add_GotFocus({ $_.Sender.BackColor = [System.Drawing.Color]::FromArgb(18, 75, 113) })
-    $combo.Add_LostFocus({ $_.Sender.BackColor = [System.Drawing.Color]::FromArgb(13, 55, 86) })
+    # Отправитель события в PowerShell — $this. $_.Sender такого свойства не имеет, и
+    # обработчик валился «Не удается найти свойство BackColor» при первом же фокусе.
+    $combo.Add_GotFocus({ $this.BackColor = [System.Drawing.Color]::FromArgb(18, 75, 113) })
+    $combo.Add_LostFocus({ $this.BackColor = [System.Drawing.Color]::FromArgb(13, 55, 86) })
     return $combo
 }
 
