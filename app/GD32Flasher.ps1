@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.6.0'
+$AppVersion = '1.6.1'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
