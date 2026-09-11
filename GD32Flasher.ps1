@@ -24,13 +24,15 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.3.0'
+$AppVersion = '1.4.0'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
 $Base = if ($env:LOCALAPPDATA -match '^[\x20-\x7E]+$') { Join-Path $env:LOCALAPPDATA 'GD32Flasher' } else { 'C:\GD32Flasher' }
 $Work = Join-Path $Base 'work'
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
+
+$LastFile = Join-Path $Base 'last.txt'
 
 $script:proc = $null
 $script:tcp = $null
@@ -44,6 +46,15 @@ $script:tail = @{ out = ''; err = '' }
 # а не в ответ telnet, и без их учёта провал операции выглядел как успех.
 $script:pumped = New-Object Text.StringBuilder
 $script:Lang = 'RU'
+# Завершение работы: пока флаг поднят, никто не ждёт ответов от OpenOCD и не пишет
+# в лог — иначе закрытие окна упирается в таймауты умирающей сессии.
+$script:closing = $false
+$script:busy = $false
+# Выдернутый донгл заставляет OpenOCD сыпать одну и ту же ошибку сотнями строк:
+# считаем их подряд и гасим сессию, а сам лог не даём засорить повторами.
+$script:lostCount = 0
+$script:lastLine = ''
+$script:repeatCount = 0
 
 # --- локализация ---
 
@@ -212,6 +223,15 @@ $Str = @{
         logBackupFF = 'Дамп состоит из одних 0xFF — по адресу {0} нет содержимого. Проверьте поле «Адрес»: основная Flash начинается с 0x08000000. Это не резервная копия, продолжать нельзя.'
         logNoBank   = 'OpenOCD не нашёл банк Flash по этому адресу — записывать было некуда. Основная Flash начинается с 0x08000000.'
         logAddrFromImage = 'Образ {0} хранит адреса внутри себя — поле «Адрес» к нему не применяется, запись пойдёт по адресам из файла.'
+        logProbeLost = 'Программатор отключён или потерян контакт с целью — сессия закрыта. Воткните донгл и нажмите «Подключиться».'
+        logRepeat   = '  ... строка повторяется, дальнейшие повторы скрыты.'
+        fiSummary   = 'Flash: {0}, {1}, {2} КБ, секторов {3} по {4} КБ, защиты нет.'
+        fiSummaryP  = 'Flash: {0}, {1}, {2} КБ, секторов {3} по {4} КБ.'
+        fiProtected = 'ЗАЩИЩЕНЫ ОТ ЗАПИСИ: секторы {0} ({1})'
+        fiUnprotOk  = 'Защита записи снята. Снимите и подайте питание платы: option bytes применяются только по power-on reset.'
+        msgUnprotect= "Снять защиту записи с секторов {0}? Чип при этом НЕ стирается.`r`n`r`nЗащита хранится в option bytes, поэтому после снятия нужно снять и подать питание платы."
+        ttlUnprotect= 'Снятие защиты записи'
+        msgCloseBusy= "Идёт операция с Flash. Если прервать её сейчас, в чипе останется недописанная прошивка и плата не запустится.`r`n`r`nЗакрыть всё равно?"
         ttlPrepare  = '=== Подготовка ==='
         ttlHalt     = 'Остановка ядра'
         ttlWrite    = 'Запись прошивки'
@@ -395,6 +415,15 @@ $Str = @{
         logBackupFF = 'The dump is all 0xFF - there is nothing at address {0}. Check the Address field: the main flash starts at 0x08000000. This is not a backup, so the operation cannot continue.'
         logNoBank   = 'OpenOCD found no flash bank at this address - there was nowhere to write. The main flash starts at 0x08000000.'
         logAddrFromImage = 'A {0} image carries its own addresses - the Address field does not apply to it, the data goes where the file says.'
+        logProbeLost = 'The probe was unplugged or the link to the target is gone - the session is closed. Plug the dongle back in and press Connect.'
+        logRepeat   = '  ... the line repeats, further repeats are hidden.'
+        fiSummary   = 'Flash: {0}, {1}, {2} KB, {3} sectors of {4} KB, no protection.'
+        fiSummaryP  = 'Flash: {0}, {1}, {2} KB, {3} sectors of {4} KB.'
+        fiProtected = 'WRITE PROTECTED: sectors {0} ({1})'
+        fiUnprotOk  = 'Write protection removed. Power-cycle the board: option bytes only apply on a power-on reset.'
+        msgUnprotect= "Remove write protection from sectors {0}? The chip is NOT erased.`r`n`r`nThe protection lives in the option bytes, so the board has to be power-cycled afterwards."
+        ttlUnprotect= 'Removing write protection'
+        msgCloseBusy= "A flash operation is running. Interrupting it now leaves half-written firmware in the chip and the board will not start.`r`n`r`nClose anyway?"
         ttlPrepare  = '=== Preparing ==='
         ttlHalt     = 'Halting the core'
         ttlWrite    = 'Programming'
@@ -460,6 +489,17 @@ function ConvertTo-TclPath([string]$p) { $p -replace '\\', '/' }
 
 function Log([string]$text, [System.Drawing.Color]$color) {
     if ($null -eq $text) { return }
+    if ($script:closing) { return }
+    # Одна и та же строка подряд: три раза печатаем, дальше молчим. Сотни одинаковых
+    # «Polling failed» не несут информации, зато вешают RichTextBox.
+    if ($text -eq $script:lastLine) {
+        $script:repeatCount++
+        if ($script:repeatCount -eq 3) { $log.AppendText((T 'logRepeat') + "`r`n") }
+        if ($script:repeatCount -ge 3) { return }
+    } else {
+        $script:lastLine = $text
+        $script:repeatCount = 0
+    }
     $log.SelectionStart = $log.TextLength
     $log.SelectionColor = $color
     $log.AppendText("$text`r`n")
@@ -490,7 +530,12 @@ function Parse-Target([string]$line) {
     }
 }
 
+# Признаки того, что программатор больше не разговаривает с целью. Поодиночке такая
+# строка бывает и при живой связи, поэтому решение принимается по серии подряд.
+$script:lostPattern = 'Fail reading CTRL/STAT|Polling failed|Examination failed|Force reconnect|open failed'
+
 function Pump-Log([switch]$Final) {
+    if ($script:closing) { return }
     foreach ($key in @('out', 'err')) {
         $f = if ($key -eq 'out') { $script:fOut } else { $script:fErr }
         if (-not (Test-Path $f)) { continue }
@@ -517,12 +562,21 @@ function Pump-Log([switch]$Final) {
                 Log $line (Line-Color $line)
                 Parse-Target $line
                 [void]$script:pumped.AppendLine($line)
+                if ($line -match $script:lostPattern) { $script:lostCount++ } else { $script:lostCount = 0 }
             }
         }
+    }
+    # Три подряд — связи нет. Держать сессию дальше незачем: она только копит ошибки,
+    # а пользователю нужно воткнуть донгл обратно и подключиться заново.
+    if ($script:lostCount -ge 3 -and (Ocd-Connected)) {
+        $script:lostCount = 0
+        LogErr ((T 'logProbeLost') + "`r`n")
+        Stop-Session
     }
 }
 
 function Set-Busy([bool]$busy, [string]$status) {
+    $script:busy = $busy
     $lblStatus.Text = $status
     $progress.Style = if ($busy) { 'Marquee' } else { 'Blocks' }
     if (-not $busy) { $progress.Value = 0 }
@@ -540,7 +594,7 @@ function Require-Connection {
     return $false
 }
 
-function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
+function Ocd-Send([string]$cmd, [int]$timeoutSec = 300, [switch]$Quiet) {
     if (-not (Ocd-Connected)) { LogErr (T 'logNoConn'); return $null }
     $ns = $script:tcp.GetStream()
     # OpenOCD шлёт в telnet и асинхронные сообщения (external reset detected и т.п.).
@@ -555,6 +609,8 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
     $buf = New-Object byte[] 8192
     $deadline = (Get-Date).AddSeconds($timeoutSec)
     while ((Get-Date) -lt $deadline) {
+        # Закрываемся — не досиживаем таймаут: сессию всё равно гасят.
+        if ($script:closing) { return $null }
         if ($ns.DataAvailable) {
             $n = $ns.Read($buf, 0, $buf.Length)
             [void]$sb.Append([Text.Encoding]::ASCII.GetString($buf, 0, $n))
@@ -568,7 +624,10 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300) {
     # Возврат каретки телнет ставит и в середине потока: без его вычистки эхо
     # команды остаётся в логе строкой вида «> reset halt».
     $lines = @($text -split "`r?`n" | ForEach-Object { ($_ -replace "`r", '') -replace '^>\s*', '' } | Where-Object { $_ -ne '' -and $_ -ne $cmd })
-    foreach ($l in $lines) { Log $l (Line-Color $l); Parse-Target $l }
+    foreach ($l in $lines) {
+        if (-not $Quiet) { Log $l (Line-Color $l) }
+        Parse-Target $l
+    }
     return ($lines -join "`n")
 }
 
@@ -728,7 +787,7 @@ function Ocd-Connect {
         while ($ns.DataAvailable) { $b = New-Object byte[] 4096; [void]$ns.Read($b, 0, $b.Length) }  # приветствие
         Set-Connected $true
         Ocd-Send 'reset halt' 30 | Out-Null
-        Ocd-Send 'flash info 0' 30 | Out-Null
+        Show-FlashInfo
         LogOk ((T 'logConnOk') + "`r`n")
         return $true
     }
@@ -740,15 +799,47 @@ function Ocd-Connect {
     return $false
 }
 
-function Ocd-Disconnect {
-    if (Ocd-Connected) { try { Ocd-Send 'shutdown' 5 | Out-Null } catch { } ; $script:tcp.Close() }
+# Завершение сессии с жёстким бюджетом времени. Раньше закрытие окна ждало ответа на
+# «shutdown» до 5 секунд, крутя DoEvents, и ещё 3 секунды выхода процесса — а при
+# выдернутом донгле OpenOCD в это время висит в USB-вызове и сыплет ошибки в лог.
+# Теперь: команду отправляем, но ответ не ждём; на самостоятельный выход даём 800 мс
+# (штатный путь, при нём USB-устройство закрывается корректно), дальше Kill.
+# $Quiet — закрытие программы: лог и панель уже не нужны.
+function Stop-Session([switch]$Quiet) {
+    if ($Quiet) { $script:closing = $true }
+    if ($script:timer) { $script:timer.Stop() }
+
+    if ($script:tcp) {
+        try {
+            if ($script:tcp.Connected) {
+                $ns = $script:tcp.GetStream()
+                $bytes = [Text.Encoding]::ASCII.GetBytes("shutdown`n")
+                $ns.Write($bytes, 0, $bytes.Length); $ns.Flush()
+            }
+        } catch { }
+        try { $script:tcp.Close() } catch { }
+    }
     $script:tcp = $null
-    if ($script:proc -and -not $script:proc.HasExited) { try { $script:proc.Kill() } catch { } }
-    if ($script:proc) { try { [void]$script:proc.WaitForExit(3000) } catch { } }
+
+    if ($script:proc) {
+        try {
+            if (-not $script:proc.WaitForExit(800)) {
+                try { $script:proc.Kill() } catch { }
+                [void]$script:proc.WaitForExit(1500)
+            }
+        } catch { }
+    }
     $script:proc = $null
-    Pump-Log -Final
-    Set-Connected $false
+    $script:lostCount = 0
+
+    if (-not $Quiet) {
+        Pump-Log -Final
+        Set-Connected $false
+        if ($script:timer) { $script:timer.Start() }
+    }
 }
+
+function Ocd-Disconnect { Stop-Session }
 
 function Set-Connected([bool]$on) {
     $lblConn.Text = if ($on) { T 'connected' } else { T 'disconnected' }
@@ -760,6 +851,14 @@ function Set-Connected([bool]$on) {
     $cmbSpeed.Enabled = -not $on; $cmbReset.Enabled = -not $on
     $btnDetect.Enabled = -not $on
     if (-not $on) { $lblCpu.Text = '--'; $lblId.Text = '--'; $lblFlash.Text = '--'; $lblVolt.Text = '--' }
+}
+
+# Путь к прошивке переживает перезапуск: файлы лежат в одном и том же месте на сервере,
+# и набирать путь заново каждый раз незачем.
+function Set-FwPath([string]$path) {
+    $txtFile.Text = $path
+    LogInfo ((T 'logSelected') -f $path, (Get-Item -LiteralPath $path).Length)
+    try { Set-Content -LiteralPath $LastFile -Value $path -Encoding UTF8 -ErrorAction Stop } catch { }
 }
 
 function Get-Fw {
@@ -780,6 +879,73 @@ function Get-Fw {
     if (-not (Test-Path -LiteralPath $dst -PathType Leaf)) { LogErr ((T 'logCopyFail') -f $dst); return $null }
     LogInfo ((T 'logFwReady') -f $txtFile.Text, $dst, (Get-Item -LiteralPath $dst).Length)
     return $dst
+}
+
+# Отдельной функцией, чтобы ветку с защитой можно было проверить на стенде: статический
+# MessageBox там подменить нечем, и тест открывал бы настоящее окно.
+function Confirm-YesNo([string]$text) {
+    return ([System.Windows.Forms.MessageBox]::Show($text, (T 'msgConfirm'), 'YesNo', 'Warning') -eq 'Yes')
+}
+
+# «flash info 0» печатает строку на каждый сектор — 32 строки одинакового «not
+# protected» вместо ответа на вопрос, есть защита или нет. Показываем итог одной
+# строкой, а перечисляем только то, что действительно защищено, и предлагаем снять.
+# Снимается это через «flash protect ... off» и чип НЕ стирает — в отличие от
+# «unlock», который снимает защиту чтения ценой mass erase.
+function Show-FlashInfo {
+    LogHead ('=== ' + (T 'ttlFlashInfo') + ' ===')
+    $out = Ocd-Send 'flash info 0' 30 -Quiet
+    if ($null -eq $out) { return }
+
+    $bank = $null
+    $sectors = @()
+    foreach ($line in ($out -split "`r?`n")) {
+        if ($line -match '#\d+\s*:\s*(\S+)\s+at\s+(0x[0-9a-fA-F]+),\s*size\s+(0x[0-9a-fA-F]+)') {
+            $bank = [pscustomobject]@{ Driver = $Matches[1]; Base = [uint32]$Matches[2]; Size = [uint32]$Matches[3] }
+        } elseif ($line -match '^\s*#\s*(\d+):\s*(0x[0-9a-fA-F]+)\s*\((0x[0-9a-fA-F]+)[^)]*\)\s*(not\s+)?protected') {
+            $sectors += [pscustomobject]@{ Num = [int]$Matches[1]; Offset = [uint32]$Matches[2]; Size = [uint32]$Matches[3]; Protected = ($Matches[4] -eq $null -or $Matches[4] -eq '') }
+        }
+    }
+    # Не разобрали — показываем как есть, молчать хуже, чем показать лишнее.
+    if (-not $bank -or $sectors.Count -eq 0) {
+        foreach ($line in ($out -split "`r?`n")) { if ($line -ne '') { Log $line (Line-Color $line) } }
+        return
+    }
+
+    $kb = [int]($bank.Size / 1024)
+    $secKb = [int]($sectors[0].Size / 1024)
+    $locked = @($sectors | Where-Object { $_.Protected })
+    if ($locked.Count -eq 0) {
+        LogOk ((T 'fiSummary') -f $bank.Driver, ('0x{0:X8}' -f $bank.Base), $kb, $sectors.Count, $secKb)
+        return
+    }
+
+    LogInfo ((T 'fiSummaryP') -f $bank.Driver, ('0x{0:X8}' -f $bank.Base), $kb, $sectors.Count, $secKb)
+    # Соседние секторы сводим в диапазоны: «0-3, 7» читается, а список из 32 номеров нет.
+    $ranges = @()
+    $from = $locked[0].Num; $prev = $from
+    foreach ($s in $locked[1..($locked.Count - 1)]) {
+        if ($s.Num -ne $prev + 1) { $ranges += ,@($from, $prev); $from = $s.Num }
+        $prev = $s.Num
+    }
+    $ranges += ,@($from, $prev)
+
+    $names = @(); $addrs = @()
+    foreach ($r in $ranges) {
+        $names += if ($r[0] -eq $r[1]) { "$($r[0])" } else { "$($r[0])-$($r[1])" }
+        $a = $locked | Where-Object { $_.Num -eq $r[0] } | Select-Object -First 1
+        $b = $locked | Where-Object { $_.Num -eq $r[1] } | Select-Object -First 1
+        $addrs += '0x{0:X8}-0x{1:X8}' -f ($bank.Base + $a.Offset), ($bank.Base + $b.Offset + $b.Size - 1)
+    }
+    $names = $names -join ', '
+    LogErr ((T 'fiProtected') -f $names, ($addrs -join ', '))
+
+    if (-not (Confirm-YesNo ((T 'msgUnprotect') -f $names))) { return }
+    $done = $true
+    foreach ($r in $ranges) {
+        if (-not (Ocd-Run "flash protect 0 $($r[0]) $($r[1]) off" (T 'ttlUnprotect') 60)) { $done = $false }
+    }
+    if ($done) { LogOk ((T 'fiUnprotOk') + "`r`n") }
 }
 
 # Аргумент offset у flash write_image и verify_image — не «куда писать», а смещение,
@@ -1159,10 +1325,7 @@ $txtFile.Add_DragEnter({
 })
 $txtFile.Add_DragDrop({
     $files = $_.Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
-    if ($files -and $files.Count -gt 0) {
-        $txtFile.Text = $files[0]
-        LogInfo ((T 'logSelected') -f $files[0], (Get-Item $files[0]).Length)
-    }
+    if ($files -and $files.Count -gt 0) { Set-FwPath $files[0] }
 })
 
 $btnBrowse = New-Btn '' $clrBtn
@@ -1174,10 +1337,12 @@ $btnBrowse.FlatAppearance.BorderSize = 0
 $btnBrowse.Add_Click({
     $d = New-Object System.Windows.Forms.OpenFileDialog
     $d.Filter = T 'dlgFw'
-    if ($d.ShowDialog() -eq 'OK') {
-        $txtFile.Text = $d.FileName
-        LogInfo ((T 'logSelected') -f $d.FileName, (Get-Item $d.FileName).Length)
+    # Открываемся там, где брали прошивку в прошлый раз.
+    if ($txtFile.Text -ne '') {
+        $dir = Split-Path -LiteralPath $txtFile.Text -Parent
+        if ($dir -and (Test-Path -LiteralPath $dir)) { $d.InitialDirectory = $dir }
     }
+    if ($d.ShowDialog() -eq 'OK') { Set-FwPath $d.FileName }
 })
 $rowFile.Controls.Add($capFile, 0, 0)
 $rowFile.Controls.Add($txtFile, 1, 0)
@@ -1292,7 +1457,7 @@ $btnInfo = New-Btn '' $clrBtn
 $btnInfo.Add_Click({
     if (-not (Require-Connection)) { return }
     Ocd-Run 'reset halt' (T 'ttlHalt') 30 | Out-Null
-    Ocd-Run 'flash info 0' (T 'ttlFlashInfo') 30 | Out-Null
+    Show-FlashInfo
     Ocd-Run "mdw $($txtAddr.Text) 8" (T 'ttlCheck') 30 | Out-Null
 })
 
@@ -1500,6 +1665,14 @@ $form.Add_Shown({
         LogInfo ''
         $btnConnect.Enabled = $true
         $btnDetect.Enabled = $true
+        # Прошивка из прошлого запуска — только если файл ещё на месте.
+        if (Test-Path -LiteralPath $LastFile -PathType Leaf) {
+            $prev = (Get-Content -LiteralPath $LastFile -Raw -ErrorAction SilentlyContinue).Trim()
+            if ($prev -and (Test-Path -LiteralPath $prev -PathType Leaf)) {
+                $txtFile.Text = $prev
+                LogInfo ((T 'logSelected') -f $prev, (Get-Item -LiteralPath $prev).Length)
+            }
+        }
         Fit-Window
     } catch {
         LogErr $_.Exception.Message
@@ -1514,7 +1687,18 @@ $timer.Interval = 250
 $timer.Add_Tick({ Pump-Log })
 $timer.Start()
 
-$form.Add_FormClosing({ $timer.Stop(); Ocd-Disconnect })
+$form.Add_FormClosing({
+    # Единственный случай, когда крестик задаёт вопрос: оборванная запись оставляет
+    # чип с недописанной прошивкой. В покое окно закрывается сразу.
+    if ($script:busy -and (Ocd-Connected)) {
+        if ([System.Windows.Forms.MessageBox]::Show((T 'msgCloseBusy'), (T 'msgConfirm'), 'YesNo', 'Warning') -ne 'Yes') {
+            $_.Cancel = $true
+            return
+        }
+    }
+    $timer.Stop()
+    Stop-Session -Quiet
+})
 
 Apply-Language
 Set-Connected $false
@@ -1522,5 +1706,12 @@ LogHead "GD32Flasher $AppVersion"
 LogInfo "$($MyInvocation.MyCommand.Path)"
 LogInfo ((T 'workdir') -f $Work)
 
-[void]$form.ShowDialog()
-$script:mutex.ReleaseMutex()
+try {
+    [void]$form.ShowDialog()
+} finally {
+    # Мьютекс отпускаем в любом случае: после аварийного выхода он оставался занятым,
+    # и следующий запуск считал, что программа уже открыта.
+    Stop-Session -Quiet
+    try { $script:mutex.ReleaseMutex() } catch { }
+    $script:mutex.Dispose()
+}
