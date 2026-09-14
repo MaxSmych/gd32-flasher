@@ -1,0 +1,30 @@
+{
+  "name": "TS-S1101-24ETXGTXGF-AresE2 (PoE switch)",
+  "mcu": "GD32E103CBT6",
+  "family": "GD32E10x",
+  "gpioBase": "0x40010800",
+  "gpioStep": "0x400",
+  "rcuApb2en": "0x40021018",
+  "buses": [
+    {
+      "id": "poe",
+      "title": "PoE bus (PSE controllers through isolator U26)",
+      "port": "B",
+      "sda": 11,
+      "scl": 10,
+      "expect": [ "0x20", "0x21", "0x23" ],
+      "note": "SDA PB11 -> U26 pin 2 (ASDA), SCL PB10 -> U26 pin 3 (ASCL) - exactly as the Si8600 datasheet says. Scanned live on 2026-09-14: 0x20, 0x21, 0x23 (the PSE chips) plus 0x0C, 0x22, 0x30, 0x60. The earlier note claiming the pair was crossed came from misreading the bus object in RAM, not from the board."
+    },
+    {
+      "id": "service",
+      "title": "Service bus (always busy, used as control channel)",
+      "port": "B",
+      "sda": 7,
+      "scl": 6,
+      "expect": [ "0x5C" ],
+      "note": "Firmware talks on it constantly; a scan here proves the method works"
+    }
+  ],
+  "controlBus": "service",
+  "notes": "Repaired 2026-09-14: dead isolator U26 blocked all commands to the PSE chips, PoE was down on every port while 48 V and the PSE chips themselves were fine."
+}
