@@ -725,7 +725,10 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300, [switch]$Quiet) {
     $text = $sb.ToString() -replace '>\s*$', ''
     # Возврат каретки телнет ставит и в середине потока: без его вычистки эхо
     # команды остаётся в логе строкой вида «> reset halt».
-    $lines = @($text -split "`r?`n" | ForEach-Object { ($_ -replace "`r", '') -replace '^>\s*', '' } | Where-Object { $_ -ne '' -and $_ -ne $cmd })
+    # NUL — оттуда же: перевод строки telnet это CR NUL, и NUL приклеивается к началу
+    # следующей строки. Глазами он неотличим от пробела, Trim() его не берёт, и разбор
+    # значения падает («0x77484434» с NUL впереди). Замерено на живой плате 14.09.2026.
+    $lines = @($text -split "`r?`n" | ForEach-Object { ($_ -replace "[`r`0]", '') -replace '^>\s*', '' } | Where-Object { $_ -ne '' -and $_ -ne $cmd })
     foreach ($l in $lines) {
         if (-not $Quiet) { Log $l (Line-Color $l) }
         Parse-Target $l
@@ -1353,6 +1356,16 @@ function Diag-Value([string]$raw) {
     return $lines[-1]
 }
 
+# read_memory у OpenOCD 0.12 отдаёт значение уже с префиксом (`0x77484434`), а не
+# десятичным: [Convert]::ToUInt32 без основания на таком падает FormatException.
+# Замерено на живой плате 14.09.2026 — офлайн-стенд с десятичной заглушкой этого
+# не ловил. Принимаем оба вида, чтобы не зависеть от версии OpenOCD.
+function Diag-UInt([string]$s) {
+    $t = "$s".Trim()
+    if ($t -match '^0[xX]([0-9A-Fa-f]+)$') { return [Convert]::ToUInt32($Matches[1], 16) }
+    return [Convert]::ToUInt32($t)
+}
+
 function Diag-ModeName([int]$nib) {
     switch ($nib) {
         0x0 { return 'analog in' }      0x4 { return 'float in' }
@@ -1372,11 +1385,11 @@ function Diag-ShowRegs($profile, [string]$port) {
     $vals = @{}
     foreach ($n in @('CTL0', 'CTL1', 'ISTAT', 'OCTL')) {
         $v = Diag-Value (Ocd-Send ("diagRd 0x{0:X8}" -f $r[$n]) 30 -Quiet)
-        $vals[$n] = [Convert]::ToUInt32($v)
+        $vals[$n] = Diag-UInt $v
         LogInfo ("  {0,-6} @0x{1:X8} = 0x{2:X8}" -f $n, $r[$n], $vals[$n])
     }
     $rcu = Diag-Value (Ocd-Send ("diagRd {0}" -f $profile.rcuApb2en) 30 -Quiet)
-    $rcuV = [Convert]::ToUInt32($rcu)
+    $rcuV = Diag-UInt $rcu
     $clk = if ($rcuV -band (1 -shl (2 + $r.Index))) { T 'diagClkOn' } else { T 'diagClkOff' }
     LogInfo ("  RCU_APB2EN = 0x{0:X8} -> {1}" -f $rcuV, $clk)
     # Режим каждой ноги словами: голый hex ничего не говорит, а «out OD» сразу
