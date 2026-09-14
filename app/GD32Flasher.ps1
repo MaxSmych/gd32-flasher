@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.6.3'
+$AppVersion = '1.7.0'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -73,6 +73,42 @@ $Str = @{
         btnDetect   = 'Определить чип'
         btnPinout   = 'Как подключить провода'
         ttlPinout   = 'Подключение программатора к плате'
+        btnDiag     = 'Диагностика живого чипа'
+        ttlDiag     = 'Диагностика: регистры, активность ног, шина'
+        diagCapProfile = 'Плата'
+        diagCapBus  = 'Шина'
+        diagCapSec  = 'Секунд'
+        diagCapPin  = 'Нога порта'
+        diagBtnRegs = 'Регистры порта'
+        diagBtnMon  = 'Активность ног'
+        diagBtnSq   = 'Меандр на ноге'
+        diagBtnScan = 'Скан шины I2C'
+        diagBtnStop = 'Стоп'
+        diagNote    = 'Меряйте мультиметром на постоянном напряжении: ~1.6 В — сигнал идёт, 3.3 В или 0 В — не идёт.'
+        diagNoProfiles = 'Нет ни одного профиля платы: положите .json в папку profiles.'
+        diagBadProfile = 'Профиль {0} не читается: {1}'
+        diagTtlRegs = 'Регистры порта {0}'
+        diagTtlMon  = 'Активность: {0}, {1} с'
+        diagTtlMonShort = 'Слушаю ноги'
+        diagTtlSq   = 'Меандр на P{0}{1}, {2} с'
+        diagTtlSqShort  = 'Гоню меандр'
+        diagTtlScan = 'Скан шины: {0}'
+        diagClkOn   = 'тактирование порта включено'
+        diagClkOff  = 'тактирование порта ВЫКЛЮЧЕНО — порт не работает'
+        diagNoAnswer = 'Непонятный ответ OpenOCD: {0}'
+        diagMonSamples = 'выборок: {0}'
+        diagMonDead = 'Обе линии молчат: ни одного низкого уровня. Шина мертва.'
+        diagMonHold = 'Сплошная полка, а не обмен: линии просто удерживаются (выдержка в коде).'
+        diagMonBusy = 'Идёт обмен: много коротких пачек — это рабочая шина.'
+        diagSqHint  = 'Ядро остановлено, ногой управляет OpenOCD. Меряйте и жмите Стоп, когда закончите.'
+        diagSqStopped = 'Меандр остановлен.'
+        diagScanFound = 'найдено устройств: {0} -> {1}'
+        diagScanNone  = 'не ответил никто'
+        diagScanMissing = 'из ожидаемых не ответили: {0}'
+        diagNoControl = 'Контрольная шина не задана в профиле — результату скана верить нельзя.'
+        diagControlFail = 'НА КОНТРОЛЬНОЙ ШИНЕ ТОЖЕ ПУСТО: не работает сам метод, а не шина. Результат недействителен.'
+        diagControlOkBusDead = 'Метод исправен (контрольная шина ответила), но на выбранной шине устройств нет.'
+        diagBadPin  = 'Нога порта задаётся числом от 0 до 15.'
         tabWires    = '  Провода  '
         tabPkg      = '  Корпуса  '
         tabHdr      = '  Разъём  '
@@ -280,6 +316,42 @@ $Str = @{
         btnDetect   = 'Detect chip'
         btnPinout   = 'How to wire it up'
         ttlPinout   = 'Wiring the probe to the board'
+        btnDiag     = 'Live chip diagnostics'
+        ttlDiag     = 'Diagnostics: registers, pin activity, bus'
+        diagCapProfile = 'Board'
+        diagCapBus  = 'Bus'
+        diagCapSec  = 'Seconds'
+        diagCapPin  = 'Port pin'
+        diagBtnRegs = 'Port registers'
+        diagBtnMon  = 'Pin activity'
+        diagBtnSq   = 'Square wave on pin'
+        diagBtnScan = 'Scan I2C bus'
+        diagBtnStop = 'Stop'
+        diagNote    = 'Measure with a DC multimeter: ~1.6 V means the signal is there, 3.3 V or 0 V means it is not.'
+        diagNoProfiles = 'No board profiles found: drop a .json into the profiles folder.'
+        diagBadProfile = 'Profile {0} cannot be read: {1}'
+        diagTtlRegs = 'Port {0} registers'
+        diagTtlMon  = 'Activity: {0}, {1} s'
+        diagTtlMonShort = 'Listening to pins'
+        diagTtlSq   = 'Square wave on P{0}{1}, {2} s'
+        diagTtlSqShort  = 'Driving square wave'
+        diagTtlScan = 'Bus scan: {0}'
+        diagClkOn   = 'port clock enabled'
+        diagClkOff  = 'port clock DISABLED - the port is dead'
+        diagNoAnswer = 'Unexpected answer from OpenOCD: {0}'
+        diagMonSamples = 'samples: {0}'
+        diagMonDead = 'Both lines are silent: not a single low level. The bus is dead.'
+        diagMonHold = 'A solid level, not traffic: the lines are simply held (a delay in the code).'
+        diagMonBusy = 'Traffic is running: many short bursts, this is a working bus.'
+        diagSqHint  = 'The core is halted, OpenOCD drives the pin. Measure, then press Stop.'
+        diagSqStopped = 'Square wave stopped.'
+        diagScanFound = 'devices found: {0} -> {1}'
+        diagScanNone  = 'nobody answered'
+        diagScanMissing = 'expected but silent: {0}'
+        diagNoControl = 'No control bus in the profile - the scan result cannot be trusted.'
+        diagControlFail = 'THE CONTROL BUS IS EMPTY TOO: the method itself is broken, not the bus. Result is void.'
+        diagControlOkBusDead = 'Method verified (control bus answered), but the selected bus has no devices.'
+        diagBadPin  = 'Port pin must be a number from 0 to 15.'
         tabWires    = '  Wires  '
         tabPkg      = '  Packages  '
         tabHdr      = '  Connector  '
@@ -1213,6 +1285,194 @@ function New-Val($text, $x, $y) {
      $l.ForeColor = $clrSideText
     return $l
 }
+# --- Диагностика живого чипа -------------------------------------------------
+# Смысл: МК можно расспрашивать по SWD, ничего не перепрошивая — читать регистры
+# периферии, считать активность на ногах, самому дёргать ноги. Так ищут обрыв
+# сигнала там, где логического анализатора нет: меандр на ноге + мультиметр в
+# режиме DC (~1.6 В = сигнал идёт, 3.3 В или 0 В = не идёт).
+
+# Папка передаётся параметром, чтобы функцию можно было прогнать тестом без GUI:
+# $PSScriptRoot внутри поднятой из файла функции пуст.
+function Diag-Profiles([string]$dir = '') {
+    if (-not $dir) { $dir = Join-Path $PSScriptRoot 'profiles' }
+    if (-not (Test-Path -LiteralPath $dir)) { return @() }
+    $out = @()
+    foreach ($f in Get-ChildItem -LiteralPath $dir -Filter '*.json' -File) {
+        try { $out += (Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json) }
+        catch { LogErr ((T 'diagBadProfile') -f $f.Name, $_.Exception.Message) }
+    }
+    return $out
+}
+
+# Адреса регистров порта. У GD32E10x имена свои (CTL0/CTL1/ISTAT/OCTL/BOP/BC),
+# но раскладка совпадает с STM32F1, поэтому одна таблица на оба семейства.
+function Diag-PortRegs($profile, [string]$port) {
+    $base = [Convert]::ToUInt32($profile.gpioBase, 16)
+    $step = [Convert]::ToUInt32($profile.gpioStep, 16)
+    $idx  = [int][char]$port.ToUpper()[0] - [int][char]'A'
+    $p    = $base + $step * $idx
+    return @{
+        Index = $idx
+        CTL0  = $p;         CTL1 = $p + 0x04
+        ISTAT = $p + 0x08;  OCTL = $p + 0x0C
+        BOP   = $p + 0x10;  BC   = $p + 0x14
+    }
+}
+
+# Tcl-процедуры живут внутри OpenOCD: цикл крутится там, а не гоняется по сокету
+# на каждый такт. Через telnet иначе вышло бы несколько тактов в секунду.
+function Diag-EnsureProcs {
+    if ($script:diagProcs) { return $true }
+    if (-not (Require-Connection)) { return $false }
+    $defs = @(
+        'proc diagRd {a} { return [lindex [read_memory $a 32 1] 0] }',
+        'proc diagH {bop m} { write_memory $bop 32 [list $m] }',
+        'proc diagL {bc m} { write_memory $bc 32 [list $m] }',
+        # Считает выборки с низким уровнем и число ПАЧЕК: сплошная полка это
+        # выдержка в коде, много коротких пачек — настоящий обмен.
+        'proc diagMon {istat ma mb ms} { set la 0; set lb 0; set n 0; set pa 0; set pb 0; set qa 1; set qb 1; set t0 [clock milliseconds]; while {[expr {[clock milliseconds] - $t0}] < $ms} { set v [diagRd $istat]; set a [expr {($v & $ma) ? 1 : 0}]; set b [expr {($v & $mb) ? 1 : 0}]; if {!$a} { incr la; if {$qa} {incr pa} }; if {!$b} { incr lb; if {$qb} {incr pb} }; set qa $a; set qb $b; incr n }; return "$n $la $lb $pa $pb" }',
+        'proc diagSq {bop bc m ms} { set t0 [clock milliseconds]; while {[expr {[clock milliseconds] - $t0}] < $ms} { diagH $bop $m; diagL $bc $m }; diagH $bop $m; return ok }',
+        # Ноги переводятся в open-drain выход: тянем только вниз, высокий уровень
+        # держат подтяжки платы. Push-pull на чужой шине выжигает выходы.
+        'proc diagOD {ctl0 ctl1 pins} { foreach p $pins { if {$p < 8} { set r $ctl0; set s [expr {$p * 4}] } else { set r $ctl1; set s [expr {($p - 8) * 4}] }; set v [diagRd $r]; set v [expr {($v & ~(0xF << $s)) | (0x7 << $s)}]; write_memory $r 32 [list $v] } }',
+        'proc diagBit {bop bc istat sda scl b} { if {$b} { diagH $bop $sda } else { diagL $bc $sda }; diagH $bop $scl; diagL $bc $scl }',
+        'proc diagByte {bop bc istat sda scl sdabit v} { for {set i 7} {$i >= 0} {incr i -1} { diagBit $bop $bc $istat $sda $scl [expr {($v >> $i) & 1}] }; diagH $bop $sda; diagH $bop $scl; set a [expr {([diagRd $istat] >> $sdabit) & 1}]; diagL $bc $scl; return $a }',
+        'proc diagScan {bop bc istat sda scl sdabit} { diagH $bop $sda; diagH $bop $scl; set f {}; for {set ad 8} {$ad <= 0x77} {incr ad} { diagH $bop $sda; diagH $bop $scl; diagL $bc $sda; diagL $bc $scl; set ack [diagByte $bop $bc $istat $sda $scl $sdabit [expr {$ad << 1}]]; diagL $bc $sda; diagH $bop $scl; diagH $bop $sda; if {$ack == 0} { lappend f [format 0x%02X $ad] } }; return $f }'
+    )
+    foreach ($d in $defs) { if ($null -eq (Ocd-Send $d 30 -Quiet)) { return $false } }
+    $script:diagProcs = $true
+    return $true
+}
+
+# Ответ telnet содержит и эхо, и служебные строки. Нужна последняя непустая.
+function Diag-Value([string]$raw) {
+    if ($null -eq $raw) { return $null }
+    $lines = @($raw -split "`r?`n" | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -ne '' -and $_ -notmatch '(?i)^(info|warn|debug|error)\s*:' })
+    if ($lines.Count -eq 0) { return $null }
+    return $lines[-1]
+}
+
+function Diag-ModeName([int]$nib) {
+    switch ($nib) {
+        0x0 { return 'analog in' }      0x4 { return 'float in' }
+        0x8 { return 'pull in' }        0x3 { return 'out PP 50M' }
+        0x2 { return 'out PP 2M' }      0x1 { return 'out PP 10M' }
+        0x7 { return 'out OD 50M' }     0x5 { return 'out OD 10M' }
+        0x6 { return 'out OD 2M' }      0xB { return 'AF PP 50M' }
+        0xF { return 'AF OD 50M' }      default { return ('0x{0:X}' -f $nib) }
+    }
+}
+
+function Diag-ShowRegs($profile, [string]$port) {
+    if (-not (Require-Connection)) { return }
+    if (-not (Diag-EnsureProcs)) { return }
+    $r = Diag-PortRegs $profile $port
+    LogHead ("=== " + ((T 'diagTtlRegs') -f $port) + " ===")
+    $vals = @{}
+    foreach ($n in @('CTL0', 'CTL1', 'ISTAT', 'OCTL')) {
+        $v = Diag-Value (Ocd-Send ("diagRd 0x{0:X8}" -f $r[$n]) 30 -Quiet)
+        $vals[$n] = [Convert]::ToUInt32($v)
+        LogInfo ("  {0,-6} @0x{1:X8} = 0x{2:X8}" -f $n, $r[$n], $vals[$n])
+    }
+    $rcu = Diag-Value (Ocd-Send ("diagRd {0}" -f $profile.rcuApb2en) 30 -Quiet)
+    $rcuV = [Convert]::ToUInt32($rcu)
+    $clk = if ($rcuV -band (1 -shl (2 + $r.Index))) { T 'diagClkOn' } else { T 'diagClkOff' }
+    LogInfo ("  RCU_APB2EN = 0x{0:X8} -> {1}" -f $rcuV, $clk)
+    # Режим каждой ноги словами: голый hex ничего не говорит, а «out OD» сразу
+    # показывает, что нога отдана под программный I2C.
+    for ($p = 0; $p -lt 16; $p++) {
+        $reg = if ($p -lt 8) { $vals['CTL0'] } else { $vals['CTL1'] }
+        $sh  = if ($p -lt 8) { $p * 4 } else { ($p - 8) * 4 }
+        $nib = ($reg -shr $sh) -band 0xF
+        $in  = ($vals['ISTAT'] -shr $p) -band 1
+        $out = ($vals['OCTL'] -shr $p) -band 1
+        LogInfo ("  P{0}{1,-2} {2,-11} in={3} out={4}" -f $port, $p, (Diag-ModeName $nib), $in, $out)
+    }
+    LogOk ((T 'logOk') + "`r`n")
+}
+
+function Diag-Monitor($profile, $bus, [int]$seconds) {
+    if (-not (Require-Connection)) { return }
+    if (-not (Diag-EnsureProcs)) { return }
+    $r = Diag-PortRegs $profile $bus.port
+    $ma = 1 -shl [int]$bus.sda
+    $mb = 1 -shl [int]$bus.scl
+    LogHead ("=== " + ((T 'diagTtlMon') -f $bus.title, $seconds) + " ===")
+    Set-Busy $true (T 'diagTtlMonShort')
+    try {
+        $raw = Ocd-Send ("diagMon 0x{0:X8} {1} {2} {3}" -f $r.ISTAT, $ma, $mb, ($seconds * 1000)) ($seconds + 60) -Quiet
+    } finally { Set-Busy $false (T 'stReady') }
+    $v = Diag-Value $raw
+    if ($v -notmatch '^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$') { LogErr ((T 'diagNoAnswer') -f $v); return }
+    $n, $la, $lb, $pa, $pb = [int]$Matches[1], [int]$Matches[2], [int]$Matches[3], [int]$Matches[4], [int]$Matches[5]
+    LogInfo ("  " + ((T 'diagMonSamples') -f $n))
+    LogInfo ("  SDA P{0}{1}: low={2} bursts={3}" -f $bus.port, $bus.sda, $la, $pa)
+    LogInfo ("  SCL P{0}{1}: low={2} bursts={3}" -f $bus.port, $bus.scl, $lb, $pb)
+    # Одна пачка на всю выдержку — это полка, то есть задержка в коде, а не обмен.
+    if ($la -eq 0 -and $lb -eq 0)      { LogErr  ((T 'diagMonDead') + "`r`n") }
+    elseif ($pa -le 2 -and $pb -le 2)  { LogErr  ((T 'diagMonHold') + "`r`n") }
+    else                               { LogOk   ((T 'diagMonBusy') + "`r`n") }
+}
+
+function Diag-Square($profile, [string]$port, [int]$pin, [int]$seconds) {
+    if (-not (Require-Connection)) { return }
+    if (-not (Diag-EnsureProcs)) { return }
+    $r = Diag-PortRegs $profile $port
+    $m = 1 -shl $pin
+    LogHead ("=== " + ((T 'diagTtlSq') -f $port, $pin, $seconds) + " ===")
+    LogInfo ((T 'diagSqHint') + "`r`n")
+    if ($null -eq (Ocd-Send 'halt' 30 -Quiet)) { return }
+    [void](Ocd-Send ("diagOD 0x{0:X8} 0x{1:X8} {{{2}}}" -f $r.CTL0, $r.CTL1, $pin) 30 -Quiet)
+    $script:diagStop = $false
+    Set-Busy $true (T 'diagTtlSqShort')
+    $t0 = Get-Date
+    try {
+        # Гоним секундными порциями: между ними форма успевает перерисоваться и
+        # принять нажатие «Стоп», иначе окно висит всю выдержку.
+        while (((Get-Date) - $t0).TotalSeconds -lt $seconds -and -not $script:diagStop) {
+            [void](Ocd-Send ("diagSq 0x{0:X8} 0x{1:X8} {2} 1000" -f $r.BOP, $r.BC, $m) 30 -Quiet)
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+    } finally { Set-Busy $false (T 'stReady') }
+    if ($script:diagStop) { LogInfo ((T 'diagSqStopped') + "`r`n") } else { LogOk ((T 'logOk') + "`r`n") }
+}
+
+function Diag-Scan($profile, $bus, [switch]$IsControl) {
+    $r = Diag-PortRegs $profile $bus.port
+    $sda = 1 -shl [int]$bus.sda
+    $scl = 1 -shl [int]$bus.scl
+    LogHead ("=== " + ((T 'diagTtlScan') -f $bus.title) + " ===")
+    [void](Ocd-Send ("diagOD 0x{0:X8} 0x{1:X8} {{{2} {3}}}" -f $r.CTL0, $r.CTL1, $bus.sda, $bus.scl) 30 -Quiet)
+    $raw = Ocd-Send ("diagScan 0x{0:X8} 0x{1:X8} 0x{2:X8} {3} {4} {5}" -f $r.BOP, $r.BC, $r.ISTAT, $sda, $scl, [int]$bus.sda) 180 -Quiet
+    $v = Diag-Value $raw
+    $found = @()
+    if ($v) { $found = @($v -split '\s+' | Where-Object { $_ -match '^0x[0-9A-Fa-f]{2}$' }) }
+    if ($found.Count -gt 0) { LogOk ("  " + ((T 'diagScanFound') -f $found.Count, ($found -join ', '))) }
+    else                    { LogInfo ("  " + (T 'diagScanNone')) }
+    if ($bus.expect) {
+        $missing = @($bus.expect | Where-Object { $found -notcontains $_ })
+        if ($missing.Count -gt 0) { LogInfo ("  " + ((T 'diagScanMissing') -f ($missing -join ', '))) }
+    }
+    return $found
+}
+
+# Скан без контрольного канала врёт: пустой результат может означать и «устройств
+# нет», и «метод не работает». На этом уже попадались, поэтому контроль обязателен
+# и его вывод определяет, доверять ли основному результату.
+function Diag-ScanWithControl($profile, $bus) {
+    if (-not (Require-Connection)) { return }
+    if (-not (Diag-EnsureProcs)) { return }
+    if ($null -eq (Ocd-Send 'halt' 30 -Quiet)) { return }
+    $found = Diag-Scan $profile $bus
+    $ctl = @($profile.buses | Where-Object { $_.id -eq $profile.controlBus })
+    if ($ctl.Count -eq 0 -or $ctl[0].id -eq $bus.id) { LogInfo ((T 'diagNoControl') + "`r`n"); return }
+    $ctlFound = Diag-Scan $profile $ctl[0] -IsControl
+    if ($ctlFound.Count -eq 0) { LogErr ((T 'diagControlFail') + "`r`n") }
+    elseif ($found.Count -eq 0) { LogErr ((T 'diagControlOkBusDead') + "`r`n") }
+    else { LogOk ((T 'logOk') + "`r`n") }
+}
+
 # Немодально: окно держат открытым, пока цепляют провода.
 function Show-Pinout {
     if ($script:pinoutForm -and -not $script:pinoutForm.IsDisposed) { $script:pinoutForm.Activate(); return }
@@ -1265,6 +1525,88 @@ function Show-Pinout {
         [Math]::Min($width + 60, $screen.Width - 80),
         [Math]::Min($height + 80, $screen.Height - 90))
     $script:pinoutForm = $f
+    $f.Show($form)
+}
+
+# Немодально: диагностика идёт с мультиметром в руках, окно должно висеть рядом.
+# Результаты пишутся в главный лог — там же, где прошивка, чтобы не разрывать картину.
+function Show-Diag {
+    if ($script:diagForm -and -not $script:diagForm.IsDisposed) { $script:diagForm.Activate(); return }
+    $profiles = @(Diag-Profiles)
+    if ($profiles.Count -eq 0) { LogErr ((T 'diagNoProfiles') + "`r`n"); return }
+
+    $f = New-Object System.Windows.Forms.Form
+    $f.Text = T 'ttlDiag'
+    $f.StartPosition = 'CenterParent'
+    $f.BackColor = $clrPanel
+    $f.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $f.FormBorderStyle = 'FixedToolWindow'
+    $f.ClientSize = New-Object System.Drawing.Size(430, 268)
+
+    $capP = New-Cap (T 'diagCapProfile') 12 16
+    $cmbP = New-Combo 130 12 280
+    $cmbP.DropDownStyle = 'DropDownList'
+    foreach ($p in $profiles) { [void]$cmbP.Items.Add($p.name) }
+    $cmbP.SelectedIndex = 0
+
+    $capB = New-Cap (T 'diagCapBus') 12 48
+    $cmbB = New-Combo 130 44 280
+    $cmbB.DropDownStyle = 'DropDownList'
+
+    $fillBuses = {
+        $cmbB.Items.Clear()
+        foreach ($b in $profiles[$cmbP.SelectedIndex].buses) { [void]$cmbB.Items.Add($b.title) }
+        if ($cmbB.Items.Count -gt 0) { $cmbB.SelectedIndex = 0 }
+    }
+    & $fillBuses
+    $cmbP.Add_SelectedIndexChanged($fillBuses)
+
+    $capS = New-Cap (T 'diagCapSec') 12 80
+    $txtS = New-Object System.Windows.Forms.TextBox
+    $txtS.Location = New-Object System.Drawing.Point(130, 76)
+    $txtS.Size = New-Object System.Drawing.Size(60, 24)
+    $txtS.Text = '15'
+
+    $capN = New-Cap (T 'diagCapPin') 210 80
+    $txtN = New-Object System.Windows.Forms.TextBox
+    $txtN.Location = New-Object System.Drawing.Point(350, 76)
+    $txtN.Size = New-Object System.Drawing.Size(60, 24)
+    $txtN.Text = '11'
+
+    $cur  = { $profiles[$cmbP.SelectedIndex] }
+    $curB = { $profiles[$cmbP.SelectedIndex].buses[[Math]::Max($cmbB.SelectedIndex, 0)] }
+    $secs = { $v = 0; if ([int]::TryParse($txtS.Text, [ref]$v) -and $v -gt 0 -and $v -le 600) { $v } else { 15 } }
+
+    $mk = {
+        param($text, $x, $y, $w, $color, $action)
+        $b = New-Btn $text $color
+        $b.AutoSize = $false
+        $b.Size = New-Object System.Drawing.Size($w, 32)
+        $b.Location = New-Object System.Drawing.Point($x, $y)
+        $b.Add_Click($action)
+        $f.Controls.Add($b)
+        return $b
+    }
+
+    $btnR = & $mk (T 'diagBtnRegs') 12  116 198 $clrBtn { Diag-ShowRegs (& $cur) ((& $curB).port) }
+    $btnM = & $mk (T 'diagBtnMon')  212 116 198 $clrBtn { Diag-Monitor (& $cur) (& $curB) (& $secs) }
+    $btnQ = & $mk (T 'diagBtnSq')   12  156 198 $clrBtn {
+        $pin = 0
+        if (-not [int]::TryParse($txtN.Text, [ref]$pin) -or $pin -lt 0 -or $pin -gt 15) { LogErr ((T 'diagBadPin') + "`r`n"); return }
+        Diag-Square (& $cur) ((& $curB).port) $pin (& $secs)
+    }
+    $btnC = & $mk (T 'diagBtnScan') 212 156 198 $clrBtn { Diag-ScanWithControl (& $cur) (& $curB) }
+    $btnX = & $mk (T 'diagBtnStop') 12  196 398 $clrBtnAlt { $script:diagStop = $true }
+
+    $note = New-Object System.Windows.Forms.Label
+    $note.Text = T 'diagNote'
+    $note.Location = New-Object System.Drawing.Point(12, 234)
+    $note.Size = New-Object System.Drawing.Size(398, 30)
+    $note.ForeColor = $clrSideText
+    $f.Controls.AddRange(@($capP, $cmbP, $capB, $cmbB, $capS, $txtS, $capN, $txtN, $note))
+
+    $f.Add_FormClosed({ $script:diagStop = $true })
+    $script:diagForm = $f
     $f.Show($form)
 }
 
@@ -1465,6 +1807,13 @@ $btnPinout.Size = New-Object System.Drawing.Size(270, 32)
 $btnPinout.Margin = New-Object System.Windows.Forms.Padding(0, 4, 0, 8)
 $btnPinout.Add_Click({ Show-Pinout })
 $sideFlow.Controls.Add($btnPinout)
+
+$btnDiag = New-Btn '' $clrBtnAlt
+$btnDiag.AutoSize = $false
+$btnDiag.Size = New-Object System.Drawing.Size(270, 32)
+$btnDiag.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
+$btnDiag.Add_Click({ Show-Diag })
+$sideFlow.Controls.Add($btnDiag)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
@@ -1820,6 +2169,7 @@ function Apply-Language {
         $btnUnlock.Text = T 'btnUnlock'
         $btnReset.Text = T 'btnReset'
         $btnClear.Text = T 'btnClear'
+        $btnDiag.Text = T 'btnDiag'
     if ($script:newVersion) { $btnUpdate.Text = (T 'updBtn') -f $script:newVersion }
     $btnDetect.Text = T 'btnDetect'
     $btnPinout.Text = T 'btnPinout'
