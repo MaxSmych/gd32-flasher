@@ -1528,6 +1528,30 @@ function Show-Pinout {
     $f.Show($form)
 }
 
+# Состояние окна диагностики живёт в $script:, потому что обработчики кликов
+# отрабатывают после выхода из Show-Diag и локальных переменных уже не видят.
+function Diag-CurProfile { return $script:diagProfiles[[Math]::Max($script:diagCmbP.SelectedIndex, 0)] }
+function Diag-CurBus     { return (Diag-CurProfile).buses[[Math]::Max($script:diagCmbB.SelectedIndex, 0)] }
+function Diag-Secs {
+    $v = 0
+    if ([int]::TryParse($script:diagTxtS.Text, [ref]$v) -and $v -gt 0 -and $v -le 600) { return $v }
+    return 15
+}
+function Diag-FillBuses {
+    $script:diagCmbB.Items.Clear()
+    foreach ($b in (Diag-CurProfile).buses) { [void]$script:diagCmbB.Items.Add($b.title) }
+    if ($script:diagCmbB.Items.Count -gt 0) { $script:diagCmbB.SelectedIndex = 0 }
+}
+function New-DiagBtn($owner, $text, $x, $y, $w, $color, $action) {
+    $b = New-Btn $text $color
+    $b.AutoSize = $false
+    $b.Size = New-Object System.Drawing.Size($w, 32)
+    $b.Location = New-Object System.Drawing.Point($x, $y)
+    $b.Add_Click($action)
+    $owner.Controls.Add($b)
+    return $b
+}
+
 # Немодально: диагностика идёт с мультиметром в руках, окно должно висеть рядом.
 # Результаты пишутся в главный лог — там же, где прошивка, чтобы не разрывать картину.
 function Show-Diag {
@@ -1553,14 +1577,6 @@ function Show-Diag {
     $cmbB = New-Combo 130 44 280
     $cmbB.DropDownStyle = 'DropDownList'
 
-    $fillBuses = {
-        $cmbB.Items.Clear()
-        foreach ($b in $profiles[$cmbP.SelectedIndex].buses) { [void]$cmbB.Items.Add($b.title) }
-        if ($cmbB.Items.Count -gt 0) { $cmbB.SelectedIndex = 0 }
-    }
-    & $fillBuses
-    $cmbP.Add_SelectedIndexChanged($fillBuses)
-
     $capS = New-Cap (T 'diagCapSec') 12 80
     $txtS = New-Object System.Windows.Forms.TextBox
     $txtS.Location = New-Object System.Drawing.Point(130, 76)
@@ -1573,30 +1589,26 @@ function Show-Diag {
     $txtN.Size = New-Object System.Drawing.Size(60, 24)
     $txtN.Text = '11'
 
-    $cur  = { $profiles[$cmbP.SelectedIndex] }
-    $curB = { $profiles[$cmbP.SelectedIndex].buses[[Math]::Max($cmbB.SelectedIndex, 0)] }
-    $secs = { $v = 0; if ([int]::TryParse($txtS.Text, [ref]$v) -and $v -gt 0 -and $v -le 600) { $v } else { 15 } }
+    # Контролы и профили держим в $script:, а не в локальных: обработчик клика
+    # отрабатывает уже после выхода из Show-Diag, и локальные переменные функции
+    # ему не видны — кнопки падали бы при каждом нажатии.
+    $script:diagProfiles = $profiles
+    $script:diagCmbP = $cmbP
+    $script:diagCmbB = $cmbB
+    $script:diagTxtS = $txtS
+    $script:diagTxtN = $txtN
+    Diag-FillBuses
+    $cmbP.Add_SelectedIndexChanged({ Diag-FillBuses })
 
-    $mk = {
-        param($text, $x, $y, $w, $color, $action)
-        $b = New-Btn $text $color
-        $b.AutoSize = $false
-        $b.Size = New-Object System.Drawing.Size($w, 32)
-        $b.Location = New-Object System.Drawing.Point($x, $y)
-        $b.Add_Click($action)
-        $f.Controls.Add($b)
-        return $b
-    }
-
-    $btnR = & $mk (T 'diagBtnRegs') 12  116 198 $clrBtn { Diag-ShowRegs (& $cur) ((& $curB).port) }
-    $btnM = & $mk (T 'diagBtnMon')  212 116 198 $clrBtn { Diag-Monitor (& $cur) (& $curB) (& $secs) }
-    $btnQ = & $mk (T 'diagBtnSq')   12  156 198 $clrBtn {
+    $btnR = New-DiagBtn $f (T 'diagBtnRegs') 12  116 198 $clrBtn    { Diag-ShowRegs (Diag-CurProfile) (Diag-CurBus).port }
+    $btnM = New-DiagBtn $f (T 'diagBtnMon')  212 116 198 $clrBtn    { Diag-Monitor (Diag-CurProfile) (Diag-CurBus) (Diag-Secs) }
+    $btnQ = New-DiagBtn $f (T 'diagBtnSq')   12  156 198 $clrBtn    {
         $pin = 0
-        if (-not [int]::TryParse($txtN.Text, [ref]$pin) -or $pin -lt 0 -or $pin -gt 15) { LogErr ((T 'diagBadPin') + "`r`n"); return }
-        Diag-Square (& $cur) ((& $curB).port) $pin (& $secs)
+        if (-not [int]::TryParse($script:diagTxtN.Text, [ref]$pin) -or $pin -lt 0 -or $pin -gt 15) { LogErr ((T 'diagBadPin') + "`r`n"); return }
+        Diag-Square (Diag-CurProfile) (Diag-CurBus).port $pin (Diag-Secs)
     }
-    $btnC = & $mk (T 'diagBtnScan') 212 156 198 $clrBtn { Diag-ScanWithControl (& $cur) (& $curB) }
-    $btnX = & $mk (T 'diagBtnStop') 12  196 398 $clrBtnAlt { $script:diagStop = $true }
+    $btnC = New-DiagBtn $f (T 'diagBtnScan') 212 156 198 $clrBtn    { Diag-ScanWithControl (Diag-CurProfile) (Diag-CurBus) }
+    $btnX = New-DiagBtn $f (T 'diagBtnStop') 12  196 398 $clrBtnAlt { $script:diagStop = $true }
 
     $note = New-Object System.Windows.Forms.Label
     $note.Text = T 'diagNote'
