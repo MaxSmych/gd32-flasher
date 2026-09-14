@@ -1819,6 +1819,15 @@ $btnConnect.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 14)
 $btnConnect.Add_Click({ if (Ocd-Connected) { Ocd-Disconnect } else { Ocd-Connect | Out-Null } })
 $sideFlow.Controls.Add($btnConnect)
 
+# Диагностика стоит сразу за «Подключиться»: это работа с чипом, а не справка.
+# Внизу панели, после подсказок, её просто не видели — она уезжала за край.
+$btnDiag = New-Btn '' $clrBtnAlt
+$btnDiag.AutoSize = $false
+$btnDiag.Size = New-Object System.Drawing.Size(270, 34)
+$btnDiag.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 14)
+$btnDiag.Add_Click({ Show-Diag })
+$sideFlow.Controls.Add($btnDiag)
+
 $grpInfo = New-SideHeading
 $grpInfo.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 3)
 $sideFlow.Controls.Add($grpInfo)
@@ -1848,13 +1857,6 @@ $btnPinout.Size = New-Object System.Drawing.Size(270, 32)
 $btnPinout.Margin = New-Object System.Windows.Forms.Padding(0, 4, 0, 8)
 $btnPinout.Add_Click({ Show-Pinout })
 $sideFlow.Controls.Add($btnPinout)
-
-$btnDiag = New-Btn '' $clrBtnAlt
-$btnDiag.AutoSize = $false
-$btnDiag.Size = New-Object System.Drawing.Size(270, 32)
-$btnDiag.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 8)
-$btnDiag.Add_Click({ Show-Diag })
-$sideFlow.Controls.Add($btnDiag)
 
 # центральная часть
 $main = New-Object System.Windows.Forms.Panel
@@ -2305,6 +2307,21 @@ $form.Add_FormClosing({
     }
     $timer.Stop()
     Stop-Session -Quiet
+})
+
+# Окно подгоняется под содержимое боковой панели, а не наоборот. Жёсткие 1040x720
+# оставляли нижние кнопки за краем: панель прокручиваемая, полосу мало кто замечает,
+# и функция считается отсутствующей. Растём ровно на недостающее и не вылезаем за
+# рабочую область экрана (панель задач, масштабирование).
+$form.Add_Shown({
+    $need = $sideFlow.Padding.Vertical
+    foreach ($c in $sideFlow.Controls) { $need += $c.Height + $c.Margin.Vertical }
+    $grow = $need - $sideFlow.ClientSize.Height
+    if ($grow -le 0) { return }
+    $wa = [System.Windows.Forms.Screen]::FromControl($form).WorkingArea
+    $form.Height = [Math]::Min($form.Height + $grow, $wa.Height)
+    $form.Left = $wa.Left + [Math]::Max(0, [int](($wa.Width  - $form.Width)  / 2))
+    $form.Top  = $wa.Top  + [Math]::Max(0, [int](($wa.Height - $form.Height) / 2))
 })
 
 Apply-Language
