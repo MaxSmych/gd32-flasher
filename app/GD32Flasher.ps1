@@ -105,6 +105,7 @@ $Str = @{
         diagScanFound = 'найдено устройств: {0} -> {1}'
         diagScanNone  = 'не ответил никто'
         diagScanMissing = 'из ожидаемых не ответили: {0}'
+        diagScanSwapped = 'ВНИМАНИЕ: по профилю не ответил никто, а с переставленной парой устройства есть. Реальная разводка: SDA = P{0}{1}, SCL = P{2}{3}. Поправьте профиль.'
         diagNoControl = 'Контрольная шина не задана в профиле — результату скана верить нельзя.'
         diagControlFail = 'НА КОНТРОЛЬНОЙ ШИНЕ ТОЖЕ ПУСТО: не работает сам метод, а не шина. Результат недействителен.'
         diagControlOkBusDead = 'Метод исправен (контрольная шина ответила), но на выбранной шине устройств нет.'
@@ -348,6 +349,7 @@ $Str = @{
         diagScanFound = 'devices found: {0} -> {1}'
         diagScanNone  = 'nobody answered'
         diagScanMissing = 'expected but silent: {0}'
+        diagScanSwapped = 'NOTE: nobody answered as configured, but the swapped pair found devices. The real wiring is SDA = P{0}{1}, SCL = P{2}{3}. Fix the profile.'
         diagNoControl = 'No control bus in the profile - the scan result cannot be trusted.'
         diagControlFail = 'THE CONTROL BUS IS EMPTY TOO: the method itself is broken, not the bus. Result is void.'
         diagControlOkBusDead = 'Method verified (control bus answered), but the selected bus has no devices.'
@@ -1451,16 +1453,30 @@ function Diag-Square($profile, [string]$port, [int]$pin, [int]$seconds) {
     if ($script:diagStop) { LogInfo ((T 'diagSqStopped') + "`r`n") } else { LogOk ((T 'logOk') + "`r`n") }
 }
 
+function Diag-ScanPins($r, [int]$sdaPin, [int]$sclPin) {
+    [void](Ocd-Send ("diagOD 0x{0:X8} 0x{1:X8} {{{2} {3}}}" -f $r.CTL0, $r.CTL1, $sdaPin, $sclPin) 30 -Quiet)
+    $raw = Ocd-Send ("diagScan 0x{0:X8} 0x{1:X8} 0x{2:X8} {3} {4} {5}" -f `
+                     $r.BOP, $r.BC, $r.ISTAT, (1 -shl $sdaPin), (1 -shl $sclPin), $sdaPin) 180 -Quiet
+    $v = Diag-Value $raw
+    if (-not $v) { return @() }
+    return @($v -split '\s+' | Where-Object { $_ -match '^0x[0-9A-Fa-f]{2}$' })
+}
+
 function Diag-Scan($profile, $bus, [switch]$IsControl) {
     $r = Diag-PortRegs $profile $bus.port
-    $sda = 1 -shl [int]$bus.sda
-    $scl = 1 -shl [int]$bus.scl
     LogHead ("=== " + ((T 'diagTtlScan') -f $bus.title) + " ===")
-    [void](Ocd-Send ("diagOD 0x{0:X8} 0x{1:X8} {{{2} {3}}}" -f $r.CTL0, $r.CTL1, $bus.sda, $bus.scl) 30 -Quiet)
-    $raw = Ocd-Send ("diagScan 0x{0:X8} 0x{1:X8} 0x{2:X8} {3} {4} {5}" -f $r.BOP, $r.BC, $r.ISTAT, $sda, $scl, [int]$bus.sda) 180 -Quiet
-    $v = Diag-Value $raw
-    $found = @()
-    if ($v) { $found = @($v -split '\s+' | Where-Object { $_ -match '^0x[0-9A-Fa-f]{2}$' }) }
+    $found = Diag-ScanPins $r ([int]$bus.sda) ([int]$bus.scl)
+    # Пустой скан — ещё не «устройств нет»: при перепутанных в профиле SDA/SCL молчат
+    # ВСЕ адреса, и это неотличимо от мёртвой шины. Замерено 14.09.2026 на исправной
+    # плате: по профилю не ответил никто, с переставленной парой нашлись 0x20/0x21/0x23.
+    # Проверять дешевле, чем ошибиться диагнозом.
+    if ($found.Count -eq 0) {
+        $swapped = Diag-ScanPins $r ([int]$bus.scl) ([int]$bus.sda)
+        if ($swapped.Count -gt 0) {
+            LogErr ("  " + ((T 'diagScanSwapped') -f $bus.port, [int]$bus.scl, $bus.port, [int]$bus.sda))
+            $found = $swapped
+        }
+    }
     if ($found.Count -gt 0) { LogOk ("  " + ((T 'diagScanFound') -f $found.Count, ($found -join ', '))) }
     else                    { LogInfo ("  " + (T 'diagScanNone')) }
     if ($bus.expect) {

@@ -10,10 +10,10 @@
       "id": "poe",
       "title": "PoE bus (PSE controllers through isolator U26)",
       "port": "B",
-      "sda": 10,
-      "scl": 11,
+      "sda": 11,
+      "scl": 10,
       "expect": [ "0x20", "0x21", "0x23" ],
-      "note": "SCL PB11 -> U26 pin 2, SDA PB10 -> U26 pin 3 (measured, opposite to the datasheet)"
+      "note": "SDA PB11 -> U26 pin 2 (ASDA), SCL PB10 -> U26 pin 3 (ASCL) - exactly as the Si8600 datasheet says. Scanned live on 2026-09-14: 0x20, 0x21, 0x23 (the PSE chips) plus 0x0C, 0x22, 0x30, 0x60. The earlier note claiming the pair was crossed came from misreading the bus object in RAM, not from the board."
     },
     {
       "id": "service",
