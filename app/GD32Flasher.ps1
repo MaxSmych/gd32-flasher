@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.7.0'
+$AppVersion = '1.7.2'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -624,7 +624,7 @@ function Line-Color([string]$line) {
 
 # Разбирает вывод OpenOCD и заполняет панель информации о цели.
 function Parse-Target([string]$line) {
-    if ($line -match 'Cortex-(M\d\+?)\s*(r\dp\d)?') { $lblCpu.Text  = "Cortex-$($Matches[1]) $($Matches[2])".Trim() }
+    if ($line -match 'Cortex-(M\d+\+?)\s*(r\dp\d)?') { $lblCpu.Text  = "Cortex-$($Matches[1]) $($Matches[2])".Trim() }
     if ($line -match 'device id = (0x[0-9a-fA-F]+)') { $lblId.Text   = $Matches[1] }
     if ($line -match 'Target voltage: ([\d\.]+)')    { $lblVolt.Text = '{0:N2} V' -f [double]$Matches[1] }
     if ($line -match 'flash size = (\d+)\s*KiB') {
@@ -971,7 +971,7 @@ function Find-Target {
             $txt = Invoke-OpenOcdOnce 'stm32f1x' @('init; flash probe 0; shutdown')
         }
         if (-not (Test-ProbeAlive $txt)) { return }
-        if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
+        if ($txt -match 'Cortex-(M\d+\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
         $found = Get-CfgByDeviceId $txt
 
         # Шаг 2: id не прочитался или семейство незнакомое — перебор. Но Device ID
@@ -983,7 +983,7 @@ function Find-Target {
             foreach ($t in @('stm32f1x', 'stm32f0x', 'stm32f3x', 'stm32f2x', 'stm32f4x', 'stm32g0x', 'stm32l4x', 'stm32h7x')) {
                 $txt = Invoke-OpenOcdOnce $t @('init; flash probe 0; shutdown')
                 Show-CandidateResult $t $txt
-                if ($txt -match 'Cortex-(M\d\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
+                if ($txt -match 'Cortex-(M\d+\+?)') { $cpuSeen = "Cortex-$($Matches[1])" }
                 $found = Get-CfgByDeviceId $txt
                 if ($found) { break }
                 if ($txt -match 'flash size = (\d+)\s*KiB' -and $txt -notmatch 'probe failed') {
@@ -1920,8 +1920,11 @@ $btnBrowse.Add_Click({
     $d = New-Object System.Windows.Forms.OpenFileDialog
     $d.Filter = T 'dlgFw'
     # Открываемся там, где брали прошивку в прошлый раз.
+    # Split-Path -LiteralPath с -Parent в PowerShell 5.1 не сочетается («Не удается
+    # разрешить набор параметров») — кнопка падала при любом заполненном поле
+    # (13.10.2026). GetDirectoryName не трогает скобки в имени и не лезет на диск.
     if ($txtFile.Text -ne '') {
-        $dir = Split-Path -LiteralPath $txtFile.Text -Parent
+        try { $dir = [System.IO.Path]::GetDirectoryName($txtFile.Text) } catch { $dir = $null }
         if ($dir -and (Test-Path -LiteralPath $dir)) { $d.InitialDirectory = $dir }
     }
     if ($d.ShowDialog() -eq 'OK') { Set-FwPath $d.FileName }
