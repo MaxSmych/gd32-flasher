@@ -24,7 +24,7 @@ if (-not $created) {
     exit
 }
 
-$AppVersion = '1.7.2'
+$AppVersion = '1.7.3'
 $Zip = Join-Path $PSScriptRoot 'tools\xpack-openocd-0.12.0-7-win32-x64.zip'
 
 # Рабочая папка обязательно без кириллицы: OpenOCD и его Tcl не переваривают не-ASCII в путях.
@@ -738,6 +738,33 @@ function Ocd-Send([string]$cmd, [int]$timeoutSec = 300, [switch]$Quiet) {
     return ($lines -join "`n")
 }
 
+# Сбой обработчика события из конфига цели (examine-end, reset-init и т.п.) — это ошибка
+# скрипта конфигурации, а не команды. 14.10.2026 на GD32E230 (Cortex-M23) с конфигом
+# stm32f1x каждый reset halt печатал «Failed to read memory at 0xe0042004» + «Execution
+# of event examine-end failed» + трассировку: регистр DBGMCU от F1, у M23 его нет. Ядро
+# при этом останавливалось, но «Остановка ядра» считалась проваленной, и «Прошить»
+# молча не доходил до записи. Вырезаем блок целиком: строку причины прямо перед
+# «Execution of event», саму её и хвост трассировки. Настоящие провалы команды в нём не
+# живут — их ловит обязательный признак успеха ($expect) и Error вне такого блока.
+function Remove-EventFailures([string]$text) {
+    $lines = @($text -split "`r?`n")
+    $keep = New-Object System.Collections.Generic.List[string]
+    $skip = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $l = $lines[$i]
+        if ($l -match 'Execution of event \S+ failed') {
+            # причина стоит строкой выше: «Failed to read/write memory at 0x...»
+            if ($keep.Count -and $keep[$keep.Count - 1] -match '(?i)^\s*(Error:\s*)?Failed to (read|write) memory at 0x') { $keep.RemoveAt($keep.Count - 1) }
+            $skip = $true
+            continue
+        }
+        if ($skip -and ($l -match '\.tcl:\d+: Error:' -or $l -match '^\s*Traceback' -or $l -match '^\s+\S')) { continue }
+        $skip = $false
+        $keep.Add($l)
+    }
+    return $keep.ToArray()
+}
+
 # $expect — обязательный признак успеха (wrote N bytes, verified N bytes и т.п.).
 # Без него операция считается успешной по отсутствию ошибок, а этого мало: запись
 # падала с «Error: couldn't open ...», ошибка уходила в лог OpenOCD мимо ответа
@@ -759,9 +786,9 @@ function Ocd-Run([string]$cmd, [string]$title, [int]$timeoutSec = 300, [string]$
     # «STM32 flash size failed» — норма для GD32, и в ответ telnet она приходит
     # голой, без префикса Warn, поэтому фильтром по уровню её не отсечь.
     $noise = 'checksum mismatch - attempting binary compare|STM32 flash size failed'
-    $logged = (($script:pumped.ToString() -split "`r?`n") | Where-Object { $_ -notmatch $noise }) -join "`n"
+    $logged = ((Remove-EventFailures $script:pumped.ToString()) | Where-Object { $_ -notmatch $noise }) -join "`n"
     # Info/Warn ошибками не считаем: «Warn : STM32 flash size failed» — норма для GD32.
-    $answer = (($out -split "`r?`n") | Where-Object { $_ -notmatch $noise -and $_ -notmatch '(?i)^\s*(info|warn|debug)\s*:' }) -join "`n"
+    $answer = ((Remove-EventFailures $out) | Where-Object { $_ -notmatch $noise -and $_ -notmatch '(?i)^\s*(info|warn|debug)\s*:' }) -join "`n"
     # В логе OpenOCD ошибка — строго строка «Error: ...».
     $ok = ($answer -notmatch '(?im)^\s*(error\b|.*\bfailed\b|.*timed out)') -and ($logged -notmatch '(?m)^\s*Error:')
     # «no flash bank found for address ...» приходит уровнем Warn и фильтром выше не
@@ -936,6 +963,12 @@ function Get-CfgByDeviceId([string]$txt) {
     $id = [Convert]::ToUInt32($Matches[1], 16)
     $fam = $id -band 0xFFF
     $hit = $script:IdTable[[int]$fam]
+    # GD32E23x отдаёт тот же 0x410, что F1, но ядро у него Cortex-M23, и F1-конфиг
+    # на нём ломает каждый сброс (см. Remove-EventFailures). У OpenOCD для них свой
+    # gd32e23x.cfg: драйвер Flash тот же stm32f1x, DBGMCU по правильному адресу.
+    # Замер 14.10.2026 на GD32E230C8T6: reset halt, flash probe, запись и сверка — без
+    # единой ошибки.
+    if ($fam -eq 0x410 -and $txt -match 'Cortex-M23\b') { $hit = @{ Name = 'GD32E23x (Cortex-M23)'; Cfg = 'gd32e23x' } }
     if ($hit) {
         LogOk ((T 'logDetectId') -f ('0x{0:X8}' -f $id), ('0x{0:X3}' -f $fam), $hit.Name, $hit.Cfg)
         return $hit.Cfg
